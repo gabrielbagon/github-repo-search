@@ -7,6 +7,8 @@ import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { Repo, SearchResponse } from "@/types/github";
 import { RepoCard } from "@/components/RepoCard";
 import { Controls } from "@/components/Controls";
+import type { ControlsHandle } from "@/components/Controls"; 
+
 
 export default function Home() {
 
@@ -86,6 +88,8 @@ const [data, setData] = useState<SearchResponse | null>(null);
 const [loading, setLoading] = useState(false);
 const [error, setError] = useState<string | null>(null);
 const controllerRef = useRef<AbortController | null>(null);
+const controlsRef = useRef<ControlsHandle | null>(null);
+
 
 // API (memo)
 const requestUrl = useMemo(() => {
@@ -158,6 +162,40 @@ const requestUrl = useMemo(() => {
 	);
 	const canPrev = page > 1;
 	const canNext = page < totalPages;
+  
+  useEffect(() => {
+  function onKeyDown(e: KeyboardEvent) {
+    // Ctrl/Cmd + K → foca a busca
+    if ((e.key === "k" || e.key === "K") && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      controlsRef.current?.focusSearch();
+      return;
+    }
+
+    // Esc → limpa a busca (se houver algo digitado)
+    if (e.key === "Escape" && query) {
+      e.preventDefault();
+      controlsRef.current?.clearSearch();
+      return;
+    }
+
+    // ← / → → paginação
+    if (e.key === "ArrowRight" && page < totalPages) {
+      e.preventDefault();
+      setPage((p) => Math.min(totalPages, p + 1));
+      return;
+    }
+    if (e.key === "ArrowLeft" && page > 1) {
+      e.preventDefault();
+      setPage((p) => Math.max(1, p - 1));
+      return;
+    }
+  }
+
+  window.addEventListener("keydown", onKeyDown);
+  return () => window.removeEventListener("keydown", onKeyDown);
+}, [query, page, totalPages]);
+
 
   return (
 		<div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
@@ -171,6 +209,7 @@ const requestUrl = useMemo(() => {
 
 			<main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start w-full max-w-[960px]">
 				<Controls
+					ref={controlsRef} // ← passa o ref para acessar focus/clear
 					query={query}
 					setQuery={setQuery}
 					sort={sort}
@@ -225,8 +264,8 @@ const requestUrl = useMemo(() => {
 					)}
 					<h2
 						id="results-heading"
-						ref={resultsHeadingRef} 
-						tabIndex={-1} 
+						ref={resultsHeadingRef}
+						tabIndex={-1}
 						className="sr-only text-white"
 					>
 						Resultados
