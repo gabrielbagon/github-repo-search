@@ -4,7 +4,7 @@ import { buildSearchQ } from "@/lib/buildSearchQ";
 import { pageWindow } from "@/lib/pageWindow";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { Repo, SearchResponse } from "@/types/github";
-// import { RepoCard } from "@/components/RepoCard";
+import { RepoCard } from "@/components/RepoCard";
 import { Controls } from "@/components/Controls";
 
 export default function Home() {
@@ -195,26 +195,8 @@ const requestUrl = useMemo(() => {
           )}
 
           {/* RepoCard */}
-          {/* {data?.items?.map((repo) => <RepoCard key={repo.id} repo={repo} />)} */}
+         {data?.items?.map((repo) => <RepoCard key={repo.id} repo={repo} />)}
 
-          {/* Placeholder simples (sem RepoCard) */}
-          {data?.items?.map((repo) => (
-            <article key={repo.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
-              <a
-                href={repo.html_url}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="font-medium hover:underline underline-offset-4"
-              >
-                {repo.full_name}
-              </a>
-              {repo.description && <p className="text-sm text-neutral-300 mt-1">{repo.description}</p>}
-              <p className="text-sm text-neutral-400 mt-2">
-                ⭐ {repo.stargazers_count.toLocaleString("pt-BR")} • Atualizado{" "}
-                {new Date(repo.updated_at).toLocaleString("pt-BR")}
-              </p>
-            </article>
-          ))}
 
           {/* Skeletons enquanto carrega */}
           {loading && (
