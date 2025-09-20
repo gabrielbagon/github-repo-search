@@ -8,6 +8,7 @@ import { Repo, SearchResponse } from "@/types/github";
 import { RepoCard } from "@/components/RepoCard";
 import { Controls } from "@/components/Controls";
 import type { ControlsHandle } from "@/components/Controls";
+import { FEATURES } from "@/config";
 import { PatControl } from "@/components/PatControl";
 import { usePatToken } from "@/lib/usePatToken";
 
@@ -15,156 +16,168 @@ import { usePatToken } from "@/lib/usePatToken";
 
 
 export default function Home() {
+	const resultsHeadingRef = useRef<HTMLHeadingElement | null>(null);
 
-  const resultsHeadingRef = useRef<HTMLHeadingElement | null>(null); 
-  
-  // UI State
-  const [query, setQuery] = useState("");
-  const debouncedQuery = useDebouncedValue(query, 500);
-  const [sort, setSort] = useState<"best" | "stars" | "updated">("best");
-  const [order, setOrder] = useState<"desc" | "asc">("desc");
-  const [perPage, setPerPage] = useState(10);
-  const [page, setPage] = useState(1);
-  const [language, setLanguage] = useState<string>("");
-  // Reset page when filters change
- useEffect(() => {
-    setPage(1);
-  }, [debouncedQuery, perPage, sort, order, language]);
+	// UI State
+	const [query, setQuery] = useState("");
+	const debouncedQuery = useDebouncedValue(query, 500);
+	const [sort, setSort] = useState<"best" | "stars" | "updated">("best");
+	const [order, setOrder] = useState<"desc" | "asc">("desc");
+	const [perPage, setPerPage] = useState(10);
+	const [page, setPage] = useState(1);
+	const [language, setLanguage] = useState<string>("");
 
+	// Reset page when filters change
+	useEffect(() => {
+		setPage(1);
+	}, [debouncedQuery, perPage, sort, order, language]);
 
-  // Hidratar estado via URL
-const ALLOWED_SORT = new Set(["best", "stars", "updated"] as const);
-const ALLOWED_ORDER = new Set(["asc", "desc"] as const);
-const ALLOWED_PER_PAGE = [10, 20, 30, 50, 100] as const;
+	// Hidratar estado via URL
+	const ALLOWED_SORT = new Set(["best", "stars", "updated"] as const);
+	const ALLOWED_ORDER = new Set(["asc", "desc"] as const);
+	const ALLOWED_PER_PAGE = [10, 20, 30, 50, 100] as const;
 
-function clampPerPage(v: number) {
-    return ALLOWED_PER_PAGE.includes(v as any) ? v : 10;
-  }
-  function clampPage(v: number) {
-    return Number.isFinite(v) && v >= 1 ? v : 1;
-  }
+	function clampPerPage(v: number) {
+		return ALLOWED_PER_PAGE.includes(v as any) ? v : 10;
+	}
+	function clampPage(v: number) {
+		return Number.isFinite(v) && v >= 1 ? v : 1;
+	}
 
-// hidratar uma única vez 
+	// hidratar uma única vez
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const sp = new URLSearchParams(window.location.search);
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		const sp = new URLSearchParams(window.location.search);
 
-    const q = sp.get("q") ?? "";
-    const s = (sp.get("sort") as "best" | "stars" | "updated") || "best";
-    const o = (sp.get("order") as "asc" | "desc") || "desc";
-    const pp = clampPerPage(Number(sp.get("per_page")));
-    const pg = clampPage(Number(sp.get("page")));
-    const lang = sp.get("lang") ?? "";
+		const q = sp.get("q") ?? "";
+		const s = (sp.get("sort") as "best" | "stars" | "updated") || "best";
+		const o = (sp.get("order") as "asc" | "desc") || "desc";
+		const pp = clampPerPage(Number(sp.get("per_page")));
+		const pg = clampPage(Number(sp.get("page")));
+		const lang = sp.get("lang") ?? "";
 
-    setQuery(q);
-    setSort(ALLOWED_SORT.has(s) ? s : "best");
-    setOrder(ALLOWED_ORDER.has(o) ? o : "desc");
-    setPerPage(pp);
-    setPage(pg);
-    setLanguage(lang);
-  }, []);
+		setQuery(q);
+		setSort(ALLOWED_SORT.has(s) ? s : "best");
+		setOrder(ALLOWED_ORDER.has(o) ? o : "desc");
+		setPerPage(pp);
+		setPage(pg);
+		setLanguage(lang);
+	}, []);
 
-useEffect(() => {
-    if (typeof window === "undefined") return;
+	useEffect(() => {
+		if (typeof window === "undefined") return;
 
-    const sp = new URLSearchParams();
-    if (debouncedQuery) sp.set("q", debouncedQuery);
-    if (sort !== "best") {
-      sp.set("sort", sort);
-      sp.set("order", order);
-    }
-    if (perPage !== 10) sp.set("per_page", String(perPage));
-    if (page !== 1) sp.set("page", String(page));
-    if (language) sp.set("lang", language);
+		const sp = new URLSearchParams();
+		if (debouncedQuery) sp.set("q", debouncedQuery);
+		if (sort !== "best") {
+			sp.set("sort", sort);
+			sp.set("order", order);
+		}
+		if (perPage !== 10) sp.set("per_page", String(perPage));
+		if (page !== 1) sp.set("page", String(page));
+		if (language) sp.set("lang", language);
 
-    const next = sp.toString();
-    const target = next ? `${window.location.pathname}?${next}` : window.location.pathname;
-    const current = window.location.pathname + window.location.search;
+		const next = sp.toString();
+		const target = next
+			? `${window.location.pathname}?${next}`
+			: window.location.pathname;
+		const current = window.location.pathname + window.location.search;
 
-    if (target !== current) {
-      history.replaceState(null, "", target);
-    }
-  }, [debouncedQuery, sort, order, perPage, page, language]);
+		if (target !== current) {
+			history.replaceState(null, "", target);
+		}
+	}, [debouncedQuery, sort, order, perPage, page, language]);
 
-// 1) estado de dados + AbortController 
-const [data, setData] = useState<SearchResponse | null>(null);
-const [loading, setLoading] = useState(false);
-const [error, setError] = useState<string | null>(null);
-const controllerRef = useRef<AbortController | null>(null);
-const controlsRef = useRef<ControlsHandle | null>(null);
-const { token } = usePatToken();                       
-const [rate, setRate] = useState<{                    
-  limit?: number; remaining?: number; reset?: number;
-}>({});
+	// Estado de dados + AbortController
+	const [data, setData] = useState<SearchResponse | null>(null);
+	const [loading, setLoading] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const controllerRef = useRef<AbortController | null>(null);
+	const controlsRef = useRef<ControlsHandle | null>(null);
 
+	// Lemos o token normalmente, mas só "usamos" se a feature estiver ligada.
+	const { token } = usePatToken();
+	const tokenUsed = FEATURES.PAT ? token : "";
 
+	// (opcional) seu estado de rate-limit já existente:
+	const [rate, setRate] = useState<{
+		limit?: number;
+		remaining?: number;
+		reset?: number;
+	}>({});
 
-// API (memo)
-const requestUrl = useMemo(() => {
-    const params = new URLSearchParams();
-    params.set("q", buildSearchQ(debouncedQuery, language));
-    if (sort !== "best") {
-      params.set("sort", sort);
-      params.set("order", order);
-    }
-    params.set("per_page", String(perPage));
-    params.set("page", String(page));
-    return `https://api.github.com/search/repositories?${params.toString()}`;
-  }, [debouncedQuery, language, sort, order, perPage, page]);
+	// API (memo)
+	const requestUrl = useMemo(() => {
+		const params = new URLSearchParams();
+		params.set("q", buildSearchQ(debouncedQuery, language));
+		if (sort !== "best") {
+			params.set("sort", sort);
+			params.set("order", order);
+		}
+		params.set("per_page", String(perPage));
+		params.set("page", String(page));
+		return `https://api.github.com/search/repositories?${params.toString()}`;
+	}, [debouncedQuery, language, sort, order, perPage, page]);
 
-  // Fetch com cancelamento e erros
- useEffect(() => {
-  setError(null);
-  setLoading(true);
+	// Fetch com cancelamento e erros
+	
+	useEffect(() => {
+		setError(null);
+		setLoading(true);
 
-  controllerRef.current?.abort();
-  const controller = new AbortController();
-  controllerRef.current = controller;
+		controllerRef.current?.abort();
+		const controller = new AbortController();
+		controllerRef.current = controller;
 
-  const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
-  if (token) headers.Authorization = `Bearer ${token}`;       
-  fetch(requestUrl, { signal: controller.signal, headers })
-    .then(async (res) => {
-      
-      const limit = Number(res.headers.get("x-ratelimit-limit") ?? "");
-      const remaining = Number(res.headers.get("x-ratelimit-remaining") ?? "");
-      const reset = Number(res.headers.get("x-ratelimit-reset") ?? "");
-      setRate({ limit: isFinite(limit) ? limit : undefined,
-                remaining: isFinite(remaining) ? remaining : undefined,
-                reset: isFinite(reset) ? reset : undefined });
+		const headers: Record<string, string> = {
+		Accept: "application/vnd.github+json",
+	};
+	if (tokenUsed) headers.Authorization = `Bearer ${tokenUsed}`;
+		fetch(requestUrl, { signal: controller.signal, headers })
+			.then(async (res) => {
+				const limit = Number(res.headers.get("x-ratelimit-limit") ?? "");
+				const remaining = Number(
+					res.headers.get("x-ratelimit-remaining") ?? ""
+				);
+				const reset = Number(res.headers.get("x-ratelimit-reset") ?? "");
+				setRate({
+					limit: isFinite(limit) ? limit : undefined,
+					remaining: isFinite(remaining) ? remaining : undefined,
+					reset: isFinite(reset) ? reset : undefined,
+				});
 
-      if (res.status === 403) {
-        let details = "";
-        if (remaining === 0 && reset) {
-          const when = new Date(reset * 1000);
-          details = ` — limite reinicia em ${when.toLocaleString("pt-BR")}`;
-        }
-        throw new Error(`Limite da Search API atingido${details}.`);
-      }
-      if (!res.ok) throw new Error(`Erro ${res.status}: ${res.statusText}`);
-      const json = (await res.json()) as SearchResponse;
-      return json;
-    })
-    .then((json) => setData(json))
-    .catch((err) => {
-      if ((err as any).name !== "AbortError") setError((err as Error).message);
-    })
-    .finally(() => setLoading(false));
+				if (res.status === 403) {
+					let details = "";
+					if (remaining === 0 && reset) {
+						const when = new Date(reset * 1000);
+						details = ` — limite reinicia em ${when.toLocaleString("pt-BR")}`;
+					}
+					throw new Error(`Limite da Search API atingido${details}.`);
+				}
+				if (!res.ok) throw new Error(`Erro ${res.status}: ${res.statusText}`);
+				const json = (await res.json()) as SearchResponse;
+				return json;
+			})
+			.then((json) => setData(json))
+			.catch((err) => {
+				if ((err as any).name !== "AbortError")
+					setError((err as Error).message);
+			})
+			.finally(() => setLoading(false));
 
-  return () => controller.abort();
-}, [requestUrl, token]);                                      
+		return () => controller.abort();
+	}, [requestUrl, tokenUsed]);
 
+	useEffect(() => {
+		// Quando terminar de carregar e houver itens, leva foco ao título dos resultados
+		if (!loading && (data?.items?.length ?? 0) > 0) {
+			resultsHeadingRef.current?.focus();
+		}
+	}, [loading, data]);
 
-  useEffect(() => {
-  // Quando terminar de carregar e houver itens, leva foco ao título dos resultados
-  if (!loading && (data?.items?.length ?? 0) > 0) {
-    resultsHeadingRef.current?.focus();
-  }
-}, [loading, data]);
-
-  // Paginação (windowed)
-  const totalCount = data?.total_count ?? 0;
+	// Paginação (windowed)
+	const totalCount = data?.total_count ?? 0;
 	const totalPages = useMemo(() => {
 		const HARD_LIMIT = 1000;
 		const byPerPage = Math.ceil(totalCount / perPage);
@@ -178,42 +191,41 @@ const requestUrl = useMemo(() => {
 	);
 	const canPrev = page > 1;
 	const canNext = page < totalPages;
-  
-  useEffect(() => {
-  function onKeyDown(e: KeyboardEvent) {
-    // Ctrl/Cmd + K → foca a busca
-    if ((e.key === "k" || e.key === "K") && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      controlsRef.current?.focusSearch();
-      return;
-    }
 
-    // Esc → limpa a busca (se houver algo digitado)
-    if (e.key === "Escape" && query) {
-      e.preventDefault();
-      controlsRef.current?.clearSearch();
-      return;
-    }
+	useEffect(() => {
+		function onKeyDown(e: KeyboardEvent) {
+			// Ctrl/Cmd + K → foca a busca
+			if ((e.key === "k" || e.key === "K") && (e.ctrlKey || e.metaKey)) {
+				e.preventDefault();
+				controlsRef.current?.focusSearch();
+				return;
+			}
 
-    // ← / → → paginação
-    if (e.key === "ArrowRight" && page < totalPages) {
-      e.preventDefault();
-      setPage((p) => Math.min(totalPages, p + 1));
-      return;
-    }
-    if (e.key === "ArrowLeft" && page > 1) {
-      e.preventDefault();
-      setPage((p) => Math.max(1, p - 1));
-      return;
-    }
-  }
+			// Esc → limpa a busca (se houver algo digitado)
+			if (e.key === "Escape" && query) {
+				e.preventDefault();
+				controlsRef.current?.clearSearch();
+				return;
+			}
 
-  window.addEventListener("keydown", onKeyDown);
-  return () => window.removeEventListener("keydown", onKeyDown);
-}, [query, page, totalPages]);
+			// ← / → → paginação
+			if (e.key === "ArrowRight" && page < totalPages) {
+				e.preventDefault();
+				setPage((p) => Math.min(totalPages, p + 1));
+				return;
+			}
+			if (e.key === "ArrowLeft" && page > 1) {
+				e.preventDefault();
+				setPage((p) => Math.max(1, p - 1));
+				return;
+			}
+		}
 
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [query, page, totalPages]);
 
-  return (
+	return (
 		<div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
 			{/* Skip link para navegação por teclado */}
 			<a
@@ -224,7 +236,7 @@ const requestUrl = useMemo(() => {
 			</a>
 
 			<main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start w-full max-w-[960px]">
-				<PatControl />
+				{FEATURES.PAT && <PatControl />}
 				<Controls
 					ref={controlsRef} // ← passa o ref para acessar focus/clear
 					query={query}
