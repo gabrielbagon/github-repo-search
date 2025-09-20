@@ -25,7 +25,7 @@ describe("usePatToken", () => {
   });
 
   it("valida formato provável de token", () => {
-    expect(isLikelyGithubToken("github_pat_ABCDEFGH1234")).toBe(true);
+    expect(isLikelyGithubToken("github_pat_ABCDEF_1234567890_ABCDEFG")).toBe(true);
     expect(isLikelyGithubToken("ghp_abcdef1234567890abcdef1234567890")).toBe(true);
     expect(isLikelyGithubToken("foo")).toBe(false);
   });
