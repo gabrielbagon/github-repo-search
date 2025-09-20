@@ -7,7 +7,10 @@ import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { Repo, SearchResponse } from "@/types/github";
 import { RepoCard } from "@/components/RepoCard";
 import { Controls } from "@/components/Controls";
-import type { ControlsHandle } from "@/components/Controls"; 
+import type { ControlsHandle } from "@/components/Controls";
+import { PatControl } from "@/components/PatControl";
+import { usePatToken } from "@/lib/usePatToken";
+
 
 
 
@@ -90,6 +93,11 @@ const [loading, setLoading] = useState(false);
 const [error, setError] = useState<string | null>(null);
 const controllerRef = useRef<AbortController | null>(null);
 const controlsRef = useRef<ControlsHandle | null>(null);
+const { token } = usePatToken();                       
+const [rate, setRate] = useState<{                    
+  limit?: number; remaining?: number; reset?: number;
+}>({});
+
 
 
 // API (memo)
@@ -106,40 +114,47 @@ const requestUrl = useMemo(() => {
   }, [debouncedQuery, language, sort, order, perPage, page]);
 
   // Fetch com cancelamento e erros
-  useEffect(() => {
-    setError(null);
-    setLoading(true);
+ useEffect(() => {
+  setError(null);
+  setLoading(true);
 
-    controllerRef.current?.abort();
-    const controller = new AbortController();
-    controllerRef.current = controller;
+  controllerRef.current?.abort();
+  const controller = new AbortController();
+  controllerRef.current = controller;
 
-    const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
+  const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
+  if (token) headers.Authorization = `Bearer ${token}`;       
+  fetch(requestUrl, { signal: controller.signal, headers })
+    .then(async (res) => {
+      
+      const limit = Number(res.headers.get("x-ratelimit-limit") ?? "");
+      const remaining = Number(res.headers.get("x-ratelimit-remaining") ?? "");
+      const reset = Number(res.headers.get("x-ratelimit-reset") ?? "");
+      setRate({ limit: isFinite(limit) ? limit : undefined,
+                remaining: isFinite(remaining) ? remaining : undefined,
+                reset: isFinite(reset) ? reset : undefined });
 
-    fetch(requestUrl, { signal: controller.signal, headers })
-      .then(async (res) => {
-        if (res.status === 403) {
-          const remaining = res.headers.get("x-ratelimit-remaining");
-          const reset = res.headers.get("x-ratelimit-reset");
-          let details = "";
-          if (remaining === "0" && reset) {
-            const when = new Date(Number(reset) * 1000);
-            details = ` — limite reinicia em ${when.toLocaleString("pt-BR")}`;
-          }
-          throw new Error(`Limite da Search API atingido${details}.`);
+      if (res.status === 403) {
+        let details = "";
+        if (remaining === 0 && reset) {
+          const when = new Date(reset * 1000);
+          details = ` — limite reinicia em ${when.toLocaleString("pt-BR")}`;
         }
-        if (!res.ok) throw new Error(`Erro ${res.status}: ${res.statusText}`);
-        const json = (await res.json()) as SearchResponse;
-        return json;
-      })
-      .then((json) => setData(json))
-      .catch((err) => {
-        if ((err as any).name !== "AbortError") setError((err as Error).message);
-      })
-      .finally(() => setLoading(false));
+        throw new Error(`Limite da Search API atingido${details}.`);
+      }
+      if (!res.ok) throw new Error(`Erro ${res.status}: ${res.statusText}`);
+      const json = (await res.json()) as SearchResponse;
+      return json;
+    })
+    .then((json) => setData(json))
+    .catch((err) => {
+      if ((err as any).name !== "AbortError") setError((err as Error).message);
+    })
+    .finally(() => setLoading(false));
 
-    return () => controller.abort();
-  }, [requestUrl]);
+  return () => controller.abort();
+}, [requestUrl, token]);                                      
+
 
   useEffect(() => {
   // Quando terminar de carregar e houver itens, leva foco ao título dos resultados
@@ -209,6 +224,7 @@ const requestUrl = useMemo(() => {
 			</a>
 
 			<main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start w-full max-w-[960px]">
+				<PatControl />
 				<Controls
 					ref={controlsRef} // ← passa o ref para acessar focus/clear
 					query={query}
@@ -255,6 +271,25 @@ const requestUrl = useMemo(() => {
 					)}
 					{error && <span className="text-red-400">{error}</span>}
 				</div>
+				{/* Auth/Rate Info */}
+				{(rate.limit !== undefined || rate.remaining !== undefined) && (
+					<div className="mt-1 text-xs text-neutral-500">
+						{token ? "Autenticação: ativa" : "Autenticação: anônima"} •
+						{rate.remaining !== undefined && rate.limit !== undefined && (
+							<>
+								{" "}
+								{rate.remaining}/{rate.limit} requisições restantes
+							</>
+						)}
+						{rate.reset ? (
+							<>
+								{" "}
+								• Reseta{" "}
+								{new Date(rate.reset * 1000).toLocaleTimeString("pt-BR")}
+							</>
+						) : null}
+					</div>
+				)}
 
 				{/* RESULTADOS */}
 				<section className="mt-4 grid gap-3 w-full">
