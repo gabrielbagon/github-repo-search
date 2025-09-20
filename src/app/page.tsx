@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+
+import { useEffect, useMemo, useRef, useState, forwardRef } from "react";
 import { buildSearchQ } from "@/lib/buildSearchQ";
 import { pageWindow } from "@/lib/pageWindow";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
@@ -8,6 +9,9 @@ import { RepoCard } from "@/components/RepoCard";
 import { Controls } from "@/components/Controls";
 
 export default function Home() {
+
+  const resultsHeadingRef = useRef<HTMLHeadingElement | null>(null); 
+  
   // UI State
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query, 500);
@@ -212,6 +216,14 @@ const requestUrl = useMemo(() => {
 							Nenhum repositório encontrado.
 						</div>
 					)}
+					<h2
+						id="results-heading"
+						ref={resultsHeadingRef} 
+						tabIndex={-1} 
+						className="sr-only text-white"
+					>
+						Resultados
+					</h2>
 
 					{/* RepoCard */}
 					{data?.items?.map((repo) => (
