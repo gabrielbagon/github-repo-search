@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom";
 import Home from "@/app/page";
+import { __setFeatureForTests } from "@/config";
 
 function makeResponse(items: any[], total = 42) {
   return new Response(JSON.stringify({
@@ -79,7 +80,7 @@ describe("Home page", () => {
     expect(await screen.findByText("acme/widgets")).toBeInTheDocument();
 
     // clica Próxima
-    await user.click(screen.getByRole("button", { name: /próxima →/i }));
+    await user.click(screen.getByRole("button", { name: /próxima página/i }));
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledTimes(2);
@@ -88,35 +89,49 @@ describe("Home page", () => {
     // URL deve conter page=2
     expect(window.location.search).toContain("page=2");
   });
-  it("envia Authorization: Bearer quando PAT está salvo", async () => {
-  // salva token antes de render (usePatToken lê no primeiro render)
-  localStorage.setItem("gh:pat", "github_pat_TESTE1234567890");
+ it("envia Authorization: Bearer quando PAT está salvo", async () => {
+		__setFeatureForTests("PAT", true); // ← liga a flag só para este teste
 
-  
-  const spy = vi.spyOn(global, "fetch").mockResolvedValue(
-    new Response(JSON.stringify({
-      total_count: 1, incomplete_results: false,
-      items: [{
-        id: 1, full_name: "acme/widgets", description: "repo de teste",
-        stargazers_count: 1, html_url: "https://github.com/acme/widgets",
-        updated_at: "2024-01-02T03:04:05Z",
-        owner: { login: "acme", avatar_url: "https://example.com/a.png" },
-      }]
-    }), {
-      status: 200,
-      headers: { "Content-Type": "application/json",
-        "x-ratelimit-limit": "30", "x-ratelimit-remaining": "29", "x-ratelimit-reset": String(Math.floor(Date.now()/1000)+60)
-      }
-    }) as unknown as Response
-  );
+		localStorage.setItem("gh:pat", "github_pat_TESTE1234567890");
 
-  const { default: Home } = await import("@/app/page");
-  render(<Home />);
+		const spy = vi.spyOn(global, "fetch").mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					total_count: 1,
+					incomplete_results: false,
+					items: [
+						{
+							id: 1,
+							full_name: "acme/widgets",
+							description: "repo de teste",
+							stargazers_count: 1,
+							html_url: "https://github.com/acme/widgets",
+							updated_at: "2024-01-02T03:04:05Z",
+							owner: { login: "acme", avatar_url: "https://example.com/a.png" },
+						},
+					],
+				}),
+				{
+					status: 200,
+					headers: {
+						"Content-Type": "application/json",
+						"x-ratelimit-limit": "30",
+						"x-ratelimit-remaining": "29",
+						"x-ratelimit-reset": String(Math.floor(Date.now() / 1000) + 60),
+					},
+				}
+			) as unknown as Response
+		);
 
-  await screen.findByText("acme/widgets");
-  expect(spy).toHaveBeenCalled();
-  const [, opts] = spy.mock.calls[0];
-  expect((opts as any).headers.Authorization).toBe("Bearer github_pat_TESTE1234567890");
-});
+		const { default: Home } = await import("@/app/page");
+		render(<Home />);
+
+		await screen.findByText("acme/widgets");
+		expect(spy).toHaveBeenCalled();
+		const [, opts] = spy.mock.calls[0];
+		expect((opts as any).headers.Authorization).toBe(
+			"Bearer github_pat_TESTE1234567890"
+		);
+ });
 
 });
