@@ -297,6 +297,8 @@ const requestUrl = useMemo(() => {
 					<button
 						type="button"
 						disabled={!canPrev}
+						aria-disabled={!canPrev} // (1)
+						aria-label="Página anterior"
 						onClick={() => canPrev && setPage((p) => p - 1)}
 						className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:border-emerald-400/40"
 					>
@@ -340,6 +342,8 @@ const requestUrl = useMemo(() => {
 					<button
 						type="button"
 						disabled={!canNext}
+						aria-disabled={!canNext} // (2)
+						aria-label="Próxima página"
 						onClick={() => canNext && setPage((p) => p + 1)}
 						className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:border-emerald-400/40"
 					>
