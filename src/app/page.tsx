@@ -149,123 +149,146 @@ const requestUrl = useMemo(() => {
 	const canNext = page < totalPages;
 
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start w-full max-w-[960px]">
-        <Controls
-          query={query}
-          setQuery={setQuery}
-          sort={sort}
-          setSort={setSort}
-          order={order}
-          setOrder={setOrder}
-          perPage={perPage}
-          setPerPage={setPerPage}
-          language={language}
-          setLanguage={setLanguage}
-        />
+		<div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
+			{/* Skip link para navegação por teclado */}
+			<a
+				href="#results-heading"
+				className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:bg-emerald-500 focus:text-black focus:px-3 focus:py-2 focus:rounded-lg"
+			>
+				Pular para resultados
+			</a>
 
-        {/* STATUS */}
-        <div className="mt-4 text-sm text-neutral-400" aria-live="polite">
-          {loading && <span>Carregando…</span>}
-          {!loading && !error && (
-            <span>
-              {debouncedQuery ? (
-                <>
-                  Resultados para <span className="text-neutral-200">“{debouncedQuery}”</span>
-                  {language && <> em <span className="text-neutral-200">{language}</span></>}
-                  : {totalCount.toLocaleString("pt-BR")} repositórios
-                </>
-              ) : (
-                <>
-                  Exibindo repositórios populares por estrelas
-                  {language && <> em <span className="text-neutral-200">{language}</span></>}
-                </>
-              )}
-            </span>
-          )}
-          {error && <span className="text-red-400">{error}</span>}
-        </div>
+			<main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start w-full max-w-[960px]">
+				<Controls
+					query={query}
+					setQuery={setQuery}
+					sort={sort}
+					setSort={setSort}
+					order={order}
+					setOrder={setOrder}
+					perPage={perPage}
+					setPerPage={setPerPage}
+					language={language}
+					setLanguage={setLanguage}
+				/>
 
-        {/* RESULTADOS */}
-        <section className="mt-4 grid gap-3 w-full">
-          {!loading && data?.items?.length === 0 && (
-            <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-neutral-300">
-              Nenhum repositório encontrado.
-            </div>
-          )}
+				{/* STATUS */}
+				<div className="mt-4 text-sm text-neutral-400" aria-live="polite">
+					{loading && <span>Carregando…</span>}
+					{!loading && !error && (
+						<span>
+							{debouncedQuery ? (
+								<>
+									Resultados para{" "}
+									<span className="text-neutral-200">“{debouncedQuery}”</span>
+									{language && (
+										<>
+											{" "}
+											em <span className="text-neutral-200">{language}</span>
+										</>
+									)}
+									: {totalCount.toLocaleString("pt-BR")} repositórios
+								</>
+							) : (
+								<>
+									Exibindo repositórios populares por estrelas
+									{language && (
+										<>
+											{" "}
+											em <span className="text-neutral-200">{language}</span>
+										</>
+									)}
+								</>
+							)}
+						</span>
+					)}
+					{error && <span className="text-red-400">{error}</span>}
+				</div>
 
-          {/* RepoCard */}
-         {data?.items?.map((repo) => <RepoCard key={repo.id} repo={repo} />)}
+				{/* RESULTADOS */}
+				<section className="mt-4 grid gap-3 w-full">
+					{!loading && data?.items?.length === 0 && (
+						<div className="rounded-xl border border-white/10 bg-white/5 p-6 text-neutral-300">
+							Nenhum repositório encontrado.
+						</div>
+					)}
 
+					{/* RepoCard */}
+					{data?.items?.map((repo) => (
+						<RepoCard key={repo.id} repo={repo} />
+					))}
 
-          {/* Skeletons enquanto carrega */}
-          {loading && (
-            <div className="grid gap-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-24 animate-pulse rounded-xl bg-white/5" />
-              ))}
-            </div>
-          )}
-        </section>
+					{/* Skeletons enquanto carrega */}
+					{loading && (
+						<div className="grid gap-3">
+							{Array.from({ length: 6 }).map((_, i) => (
+								<div
+									key={i}
+									className="h-24 animate-pulse rounded-xl bg-white/5"
+								/>
+							))}
+						</div>
+					)}
+				</section>
 
-        {/* PAGINAÇÃO */}
-        <nav
-          className="mt-6 flex items-center justify-between gap-4 w-full"
-          aria-label="Paginação de resultados"
-        >
-          <button
-            type="button"
-            disabled={!canPrev}
-            onClick={() => canPrev && setPage((p) => p - 1)}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:border-emerald-400/40"
-          >
-            ← Anterior
-          </button>
+				{/* PAGINAÇÃO */}
+				<nav
+					className="mt-6 flex items-center justify-between gap-4 w-full"
+					aria-label="Paginação de resultados"
+				>
+					<button
+						type="button"
+						disabled={!canPrev}
+						onClick={() => canPrev && setPage((p) => p - 1)}
+						className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:border-emerald-400/40"
+					>
+						← Anterior
+					</button>
 
-          <div className="flex items-center gap-1">
-            {pages[0] > 1 && (
-              <button
-                type="button"
-                onClick={() => setPage(1)}
-                className="px-3 py-2 text-sm rounded-lg hover:bg-white/5"
-              >
-                1…
-              </button>
-            )}
-            {pages.map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setPage(p)}
-                aria-current={p === page ? "page" : undefined}
-                className={`px-3 py-2 text-sm rounded-lg hover:bg-white/5 ${
-                  p === page ? "bg-emerald-500/20 text-emerald-200" : ""
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-            {pages[pages.length - 1] < totalPages && (
-              <button
-                type="button"
-                onClick={() => setPage(totalPages)}
-                className="px-3 py-2 text-sm rounded-lg hover:bg-white/5"
-              >
-                …{totalPages}
-              </button>
-            )}
-          </div>
+					<div className="flex items-center gap-1">
+						{pages[0] > 1 && (
+							<button
+								type="button"
+								onClick={() => setPage(1)}
+								className="px-3 py-2 text-sm rounded-lg hover:bg-white/5"
+							>
+								1…
+							</button>
+						)}
+						{pages.map((p) => (
+							<button
+								key={p}
+								type="button"
+								onClick={() => setPage(p)}
+								aria-current={p === page ? "page" : undefined}
+								className={`px-3 py-2 text-sm rounded-lg hover:bg-white/5 ${
+									p === page ? "bg-emerald-500/20 text-emerald-200" : ""
+								}`}
+							>
+								{p}
+							</button>
+						))}
+						{pages[pages.length - 1] < totalPages && (
+							<button
+								type="button"
+								onClick={() => setPage(totalPages)}
+								className="px-3 py-2 text-sm rounded-lg hover:bg-white/5"
+							>
+								…{totalPages}
+							</button>
+						)}
+					</div>
 
-          <button
-            type="button"
-            disabled={!canNext}
-            onClick={() => canNext && setPage((p) => p + 1)}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:border-emerald-400/40"
-          >
-            Próxima →
-          </button>
-        </nav>
-      </main>
-    </div>
-  );
+					<button
+						type="button"
+						disabled={!canNext}
+						onClick={() => canNext && setPage((p) => p + 1)}
+						className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:border-emerald-400/40"
+					>
+						Próxima →
+					</button>
+				</nav>
+			</main>
+		</div>
+	);
 }
