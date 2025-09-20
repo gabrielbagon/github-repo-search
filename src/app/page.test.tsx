@@ -26,7 +26,7 @@ beforeEach(() => {
         stargazers_count: 123,
         html_url: "https://github.com/acme/widgets",
         updated_at: "2024-01-02T03:04:05Z",
-        owner: { login: "acme", avatar_url: "" },
+        owner: { login: "acme", avatar_url: "https://example.com/avatar.png" },
       },
     ])
   );
