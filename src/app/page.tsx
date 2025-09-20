@@ -136,6 +136,13 @@ const requestUrl = useMemo(() => {
     return () => controller.abort();
   }, [requestUrl]);
 
+  useEffect(() => {
+  // Quando terminar de carregar e houver itens, leva foco ao título dos resultados
+  if (!loading && (data?.items?.length ?? 0) > 0) {
+    resultsHeadingRef.current?.focus();
+  }
+}, [loading, data]);
+
   // Paginação (windowed)
   const totalCount = data?.total_count ?? 0;
 	const totalPages = useMemo(() => {
