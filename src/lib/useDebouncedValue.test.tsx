@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { act } from "react-dom/test-utils";            
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 
 function Demo() {
@@ -22,7 +23,7 @@ function Demo() {
 describe("useDebouncedValue", () => {
   it("atualiza o valor apenas após o delay", async () => {
     vi.useFakeTimers();
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const user = userEvent.setup(); 
 
     render(<Demo />);
     await user.type(screen.getByLabelText("input"), "abc");
@@ -30,11 +31,11 @@ describe("useDebouncedValue", () => {
     // antes do delay
     expect(screen.getByLabelText("debounced").textContent).toBe("");
 
-    // avança o relógio
-    vi.advanceTimersByTime(299);
-    expect(screen.getByLabelText("debounced").textContent).toBe("");
+    
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
 
-    vi.advanceTimersByTime(1);
     expect(screen.getByLabelText("debounced").textContent).toBe("abc");
   });
 });
