@@ -28,7 +28,7 @@ function clampPage(v: number) {
   return Number.isFinite(v) && v >= 1 ? v : 1;
 }
 
-// hidratar uma única vez ao montar
+// hidratar uma única vez 
 useEffect(() => {
   if (typeof window === "undefined") return;
   const sp = new URLSearchParams(window.location.search);
@@ -47,6 +47,28 @@ useEffect(() => {
   setPage(pg);                                   
   setLanguage(lang);                              
 }, []);
+
+useEffect(() => {
+  if (typeof window === "undefined") return;
+
+  const sp = new URLSearchParams();
+  if (debouncedQuery) sp.set("q", debouncedQuery); 
+  if (sort !== "best") {                            
+    sp.set("sort", sort);
+    sp.set("order", order);
+  }
+  if (perPage !== 10) sp.set("per_page", String(perPage)); // default 10
+  if (page !== 1) sp.set("page", String(page));            
+  if (language) sp.set("lang", language);                  
+
+  const next = sp.toString();
+  const target = next ? `${window.location.pathname}?${next}` : window.location.pathname;
+  const current = window.location.pathname + window.location.search;
+
+  if (target !== current) {
+    history.replaceState(null, "", target);
+  }
+}, [debouncedQuery, sort, order, perPage, page, language]);
 
   return (
     <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
