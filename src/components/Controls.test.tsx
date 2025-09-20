@@ -14,7 +14,8 @@ describe("Controls", () => {
     const setOrder = vi.fn();
     const setPerPage = vi.fn();
 
-    render(
+    // ⬇️ render inicial (sort = "best")
+    const { rerender } = render(
       <Controls
         query=""
         setQuery={setQuery}
@@ -35,10 +36,27 @@ describe("Controls", () => {
     await user.selectOptions(screen.getByLabelText(/linguagem/i), "TypeScript");
     expect(setLanguage).toHaveBeenCalledWith("TypeScript");
 
+    
     await user.selectOptions(screen.getByLabelText(/ordenar/i), "stars");
     expect(setSort).toHaveBeenCalledWith("stars");
 
-    // quando sort != best, aparece o select de ordem
+    
+    rerender(
+      <Controls
+        query=""
+        setQuery={setQuery}
+        sort="stars"           
+        setSort={setSort}
+        order="desc"
+        setOrder={setOrder}
+        perPage={10}
+        setPerPage={setPerPage}
+        language="TypeScript"
+        setLanguage={setLanguage}
+      />
+    );
+
+    
     await user.selectOptions(screen.getByLabelText(/ordem/i), "asc");
     expect(setOrder).toHaveBeenCalledWith("asc");
   });
