@@ -1,41 +1,57 @@
 import { describe, it, expect, vi } from "vitest";
-import { useState } from "react";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { act } from "react-dom/test-utils";            
+import { renderHook, act } from "@testing-library/react";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-
-function Demo() {
-  const [v, setV] = useState("");
-  const debounced = useDebouncedValue(v, 300);
-  return (
-    <>
-      <input
-        aria-label="input"
-        value={v}
-        onChange={(e) => setV(e.target.value)}
-      />
-      <div aria-label="debounced">{debounced}</div>
-    </>
-  );
-}
 
 describe("useDebouncedValue", () => {
   it("atualiza o valor apenas após o delay", async () => {
-    vi.useFakeTimers();
-    const user = userEvent.setup(); 
+    vi.useFakeTimers(); // usar timers falsos ANTES de renderizar o hook
 
-    render(<Demo />);
-    await user.type(screen.getByLabelText("input"), "abc");
+    // renderiza o hook com valor inicial ""
+    const { result, rerender } = renderHook(
+      ({ value, delay }: { value: string; delay: number }) => useDebouncedValue(value, delay),
+      { initialProps: { value: "", delay: 300 } }
+    );
 
-    // antes do delay
-    expect(screen.getByLabelText("debounced").textContent).toBe("");
+    // estado inicial é o valor imediatamente disponível
+    expect(result.current).toBe("");
 
-    
-    await act(async () => {
-      vi.advanceTimersByTime(300);
+    // altera o valor para "abc"
+    rerender({ value: "abc", delay: 300 });
+
+    // antes do delay terminar, nada muda
+    act(() => {
+      vi.advanceTimersByTime(299);
     });
+    expect(result.current).toBe("");
 
-    expect(screen.getByLabelText("debounced").textContent).toBe("abc");
+    // após o prazo completo, atualiza
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(result.current).toBe("abc");
   });
+
+  it("reinicia o timer quando o valor muda durante o debounce", async () => {
+    vi.useFakeTimers();
+
+    const { result, rerender } = renderHook(
+      ({ value, delay }: { value: string; delay: number }) => useDebouncedValue(value, delay),
+      { initialProps: { value: "", delay: 200 } }
+    );
+
+    // muda para "a", quase estoura o tempo...
+    rerender({ value: "a", delay: 200 });
+    act(() => vi.advanceTimersByTime(150));
+
+    // ...muda para "ab" antes do fim — reinicia o timer
+    rerender({ value: "ab", delay: 200 });
+    act(() => vi.advanceTimersByTime(150));
+    expect(result.current).toBe(""); // ainda não atualizou
+
+    // agora completa o novo prazo
+    await act(async () => {
+      vi.advanceTimersByTime(50);
+    });
+    expect(result.current).toBe("ab");
+  })
 });
