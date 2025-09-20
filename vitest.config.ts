@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   test: {
     environment: "jsdom",
+    globals: true, // ← habilita describe/it/expect no escopo global
     setupFiles: [path.resolve(__dirname, "test/setup.ts")],
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     css: true,
