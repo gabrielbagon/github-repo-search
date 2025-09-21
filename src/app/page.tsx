@@ -14,6 +14,7 @@ import { FEATURES } from "@/config";
 import { PatControl } from "@/components/PatControl";
 import { usePatToken } from "@/lib/usePatToken";
 import { clampPrefs, readPrefs, writePrefs } from "@/lib/prefs";
+import { Footer } from "@/components/Footer";
 
 export default function Home() {
   const resultsHeadingRef = useRef<HTMLHeadingElement | null>(null);
@@ -379,6 +380,7 @@ export default function Home() {
           </button>
         </nav>
       </main>
+      <Footer />
     </div>
   );
 }
