@@ -8,6 +8,7 @@ import {
   useState,
   useDeferredValue,
 } from "react";
+import { Navbar } from "@/components/Navbar";
 import { buildSearchQ } from "@/lib/buildSearchQ";
 import { pageWindow } from "@/lib/pageWindow";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
@@ -275,6 +276,8 @@ export default function Home() {
       >
         Pular para resultados
       </a>
+      <Navbar />
+
 
       <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start w-full max-w-[960px]">
         {FEATURES.PAT && <PatControl />}
