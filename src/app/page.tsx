@@ -1,3 +1,4 @@
+// src/app/page.tsx
 "use client";
 
 import {
@@ -45,24 +46,26 @@ export default function Home() {
   const [data, setData] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<number | undefined>(undefined);
+  const lastStatusRef = useRef<number | undefined>(undefined);
+  const [reloadSeq, setReloadSeq] = useState(0); // força re-tentativa
 
-  // Rate-limit (opcional – útil pra feedback ao usuário)
+  // Rate-limit (feedback ao usuário)
   const [rate, setRate] = useState<{ limit?: number; remaining?: number; reset?: number }>({});
 
   // Token (apenas usado se a feature estiver ligada)
   const { token } = usePatToken();
   const tokenUsed = FEATURES.PAT ? token : "";
 
-  // --------------------------------------------
-  // Hidratar estado via URL + localStorage (1x)
-  // --------------------------------------------
+  // -------------------------------
+  // Hidratar via URL + localStorage
+  // -------------------------------
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const sp = new URLSearchParams(window.location.search);
-    const stored = readPrefs(); // prefs do localStorage
+    const stored = readPrefs();
 
-    // Preferência: URL > localStorage > defaults (clampPrefs valida)
     const clamped = clampPrefs({
       sort: (sp.get("sort") ?? stored.sort) as any,
       order: (sp.get("order") ?? stored.order) as any,
@@ -84,7 +87,7 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persistir preferências quando mudarem (exceto query/page)
+  // Persistir prefs (exceto query/page)
   useEffect(() => {
     if (!hydrated) return;
     writePrefs({ sort, order, perPage, language });
@@ -96,9 +99,9 @@ export default function Home() {
     setPage(1);
   }, [debouncedQuery, perPage, sort, order, language, hydrated]);
 
-  // --------------------------------------------
-  // Sincronizar a URL (replaceState) com o estado
-  // --------------------------------------------
+  // -------------------------------
+  // Sincronizar URL (replaceState)
+  // -------------------------------
   useEffect(() => {
     if (typeof window === "undefined" || !hydrated) return;
 
@@ -121,9 +124,9 @@ export default function Home() {
     }
   }, [debouncedQuery, sort, order, perPage, page, language, hydrated]);
 
-  // --------------------------------------------
-  // Construir a URL de busca da API (memo)
-  // --------------------------------------------
+  // -------------------------------
+  // URL da API (memo)
+  // -------------------------------
   const requestUrl = useMemo(() => {
     const q = buildSearchQ(debouncedQuery, language);
     const params = new URLSearchParams();
@@ -137,14 +140,16 @@ export default function Home() {
     return `https://api.github.com/search/repositories?${params.toString()}`;
   }, [debouncedQuery, language, sort, order, perPage, page]);
 
-  // --------------------------------------------
-  // Fetch com cancelamento + captura de rate-limit
-  // --------------------------------------------
+  // -------------------------------
+  // Fetch com cancelamento + erros
+  // -------------------------------
   useEffect(() => {
     if (!hydrated) return;
 
     setError(null);
+    setErrorCode(undefined);
     setLoading(true);
+    lastStatusRef.current = undefined;
 
     controllerRef.current?.abort();
     const controller = new AbortController();
@@ -155,6 +160,8 @@ export default function Home() {
 
     fetch(requestUrl, { signal: controller.signal, headers })
       .then(async (res) => {
+        lastStatusRef.current = res.status;
+
         // rate headers
         const limit = Number(res.headers.get("x-ratelimit-limit") ?? "");
         const remaining = Number(res.headers.get("x-ratelimit-remaining") ?? "");
@@ -173,18 +180,28 @@ export default function Home() {
           }
           throw new Error(`Limite da Search API atingido${details}.`);
         }
+        if (res.status === 401) {
+          throw new Error("Token inválido ou sem escopo suficiente.");
+        }
+        if (res.status === 422) {
+          throw new Error("Sua busca parece inválida. Tente simplificar os termos.");
+        }
+
         if (!res.ok) throw new Error(`Erro ${res.status}: ${res.statusText}`);
         const json = (await res.json()) as SearchResponse;
         return json;
       })
       .then((json) => setData(json))
       .catch((err) => {
-        if ((err as any).name !== "AbortError") setError((err as Error).message);
+        if ((err as any).name !== "AbortError") {
+          setError((err as Error).message);
+          setErrorCode(lastStatusRef.current);
+        }
       })
       .finally(() => setLoading(false));
 
     return () => controller.abort();
-  }, [requestUrl, tokenUsed, hydrated]);
+  }, [requestUrl, tokenUsed, hydrated, reloadSeq]);
 
   // Acessibilidade: focar título após carregar resultados
   useEffect(() => {
@@ -193,9 +210,9 @@ export default function Home() {
     }
   }, [loading, data]);
 
-  // --------------------------------------------
+  // -------------------------------
   // Paginação (windowed)
-  // --------------------------------------------
+  // -------------------------------
   const totalCount = data?.total_count ?? 0;
   const totalPages = useMemo(() => {
     const HARD_LIMIT = 1000; // limite da Search API
@@ -208,26 +225,19 @@ export default function Home() {
   const canPrev = page > 1;
   const canNext = page < totalPages;
 
-  // --------------------------------------------
   // Atalhos de teclado
-  // --------------------------------------------
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      // Ctrl/Cmd + K → foca a busca
       if ((e.key === "k" || e.key === "K") && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         controlsRef.current?.focusSearch();
         return;
       }
-
-      // Esc → limpa a busca
       if (e.key === "Escape" && query) {
         e.preventDefault();
         controlsRef.current?.clearSearch();
         return;
       }
-
-      // ← / → → paginação
       if (e.key === "ArrowRight" && canNext) {
         e.preventDefault();
         setPage((p) => Math.min(totalPages, p + 1));
@@ -244,17 +254,21 @@ export default function Home() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [query, canNext, canPrev, totalPages]);
 
-  // --------------------------------------------
   // PERFORMANCE: lista deferida + memoizada
-  // --------------------------------------------
   const deferredData = useDeferredValue(data);
   const repoCards = useMemo(() => {
     return deferredData?.items?.map((repo) => <RepoCard key={repo.id} repo={repo} />) ?? null;
   }, [deferredData]);
 
+  // Helpers de UI para erro e vazio
+  const showInitialHelp = !loading && !error && (!data || !debouncedQuery);
+  const showEmpty = !loading && !error && data?.items?.length === 0;
+
+  const retry = () => setReloadSeq((x) => x + 1);
+
   return (
     <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      {/* Skip link para navegação por teclado */}
+      {/* Skip link */}
       <a
         href="#results-heading"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:bg-emerald-500 focus:text-black focus:px-3 focus:py-2 focus:rounded-lg"
@@ -308,7 +322,32 @@ export default function Home() {
               )}
             </span>
           )}
-          {error && <span className="text-red-400">{error}</span>}
+          {error && (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-200 px-3 py-2">
+              <p className="font-medium">
+                {errorCode ? `Erro ${errorCode}: ` : ""}{error}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={retry}
+                  className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 hover:border-emerald-400/40"
+                >
+                  Tentar novamente
+                </button>
+                {errorCode === 403 && !tokenUsed && FEATURES.PAT && (
+                  <span className="text-neutral-300">
+                    Dica: adicione um <strong>PAT</strong> para aumentar o limite.
+                  </span>
+                )}
+                {errorCode === 422 && (
+                  <span className="text-neutral-300">
+                    Dica: remova operadores complexos ou reduza o número de termos.
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Auth/Rate Info */}
@@ -332,12 +371,6 @@ export default function Home() {
 
         {/* RESULTADOS */}
         <section className="mt-4 grid gap-3 w-full">
-          {!loading && data?.items?.length === 0 && (
-            <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-neutral-300">
-              Nenhum repositório encontrado.
-            </div>
-          )}
-
           <h2
             id="results-heading"
             ref={resultsHeadingRef}
@@ -347,8 +380,32 @@ export default function Home() {
             Resultados
           </h2>
 
+          {/* Estado inicial com dicas */}
+          {showInitialHelp && (
+            <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-neutral-300">
+              <p className="mb-2">Dicas de busca:</p>
+              <ul className="list-disc pl-5 space-y-1 text-sm">
+                <li>Use termos simples, ex.: <span className="text-neutral-100">react</span>, <span className="text-neutral-100">next</span>, <span className="text-neutral-100">aem</span>.</li>
+                <li>Filtre por linguagem no seletor “Linguagem”.</li>
+                <li>Altere a ordenação por “Estrelas” ou “Última atualização”.</li>
+              </ul>
+            </div>
+          )}
+
+          {/* Nenhum resultado */}
+          {!loading && !error && data?.items?.length === 0 && (
+            <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-neutral-300">
+              <p className="font-medium">Nenhum repositório encontrado.</p>
+              <p className="mt-2 text-sm">
+                Tente remover filtros, usar menos termos ou escolher outra linguagem.
+              </p>
+            </div>
+          )}
+
+          {/* Lista (deferida + memoizada) */}
           {repoCards}
 
+          {/* Skeletons */}
           {loading && (
             <div className="grid gap-3">
               {Array.from({ length: 6 }).map((_, i) => (
