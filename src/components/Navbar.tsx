@@ -3,13 +3,16 @@
 
 import { useMemo } from "react";
 import { usePatToken } from "@/lib/usePatToken";
-import Image from "next/image";
+import { GRSLogoLockup } from "@/asset/GRSLogoLockup";
 
-export function Navbar() {
-  // pega o token salvo (se existir)
+type Props = {
+  patOpen: boolean;
+  onTogglePat: () => void;
+};
+
+export function Navbar({ patOpen, onTogglePat }: Props) {
   const { token } = usePatToken();
 
-  // deriva o status visual só quando token mudar
   const auth = useMemo(
     () =>
       token
@@ -30,28 +33,38 @@ export function Navbar() {
           className="flex items-center gap-2 text-sm font-medium text-white hover:opacity-90"
           aria-label="Go to home"
         >
-          {/* logotipo simples  */}
-          <Image src={"/github-mark-white.svg"} alt="Github logo" width={40} height={40} />
-          GitHub Repo Search
+            <GRSLogoLockup className="w-auto" />
         </a>
 
-        {/* ações à direita */}
+        {/* actions */}
         <nav aria-label="Top navigation" className="flex items-center gap-3">
-          {/* badge de auth */}
+          {/* toggle PAT panel */}
+          <button
+            type="button"
+            onClick={onTogglePat}
+            aria-pressed={patOpen}
+            aria-controls="pat-section"
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs hover:border-emerald-400/40"
+            title={patOpen ? "Hide PAT panel" : "Show PAT panel"}
+          >
+            PAT {patOpen ? "▾" : "▸"}
+          </button>
+
+          {/* auth badge */}
           <span className="inline-flex items-center gap-2 text-xs text-neutral-300">
             <span className={`h-2 w-2 rounded-full ${auth.dot}`} aria-hidden="true" />
             {auth.label}
           </span>
 
-          {/* dica de atalho */}
+          {/* shortcut hint */}
           <span
-            title="Pressione ⌘K (ou Ctrl+K) para focar a busca"
+            title="Press ⌘K (or Ctrl+K) to focus search"
             className="hidden sm:inline text-xs text-neutral-400"
           >
             ⌘K
           </span>
 
-          {/* link para GitHub (genérico) */}
+          {/* GitHub link */}
           <a
             href="https://github.com"
             target="_blank"

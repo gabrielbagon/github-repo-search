@@ -5,7 +5,7 @@ import { Navbar } from "./Navbar";
 
 describe("Navbar", () => {
   it("renders brand and GitHub link", () => {
-    render(<Navbar />);
+    render(<Navbar patOpen={false} onTogglePat={() => {}} />);
     expect(screen.getByRole("banner")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /go to home/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /open github/i })).toBeInTheDocument();
