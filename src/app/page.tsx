@@ -2,14 +2,15 @@
 
 import {
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  useDeferredValue,
 } from "react";
 import { buildSearchQ } from "@/lib/buildSearchQ";
 import { pageWindow } from "@/lib/pageWindow";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
+import { Repo, SearchResponse } from "@/types/github";
 import { RepoCard } from "@/components/RepoCard";
 import { Controls } from "@/components/Controls";
 import type { ControlsHandle } from "@/components/Controls";
@@ -17,14 +18,18 @@ import { FEATURES } from "@/config";
 import { PatControl } from "@/components/PatControl";
 import { usePatToken } from "@/lib/usePatToken";
 import { clampPrefs, readPrefs, writePrefs } from "@/lib/prefs";
-import type { SearchResponse } from "@/types/github";
+
+// Valores aceitos (para validação quando hidratamos pela URL)
+const ALLOWED_SORT = new Set(["best", "stars", "updated"] as const);
+const ALLOWED_ORDER = new Set(["asc", "desc"] as const);
+const ALLOWED_PER_PAGE = [10, 20, 30, 50, 100] as const;
 
 export default function Home() {
   const resultsHeadingRef = useRef<HTMLHeadingElement | null>(null);
-  const controllerRef = useRef<AbortController | null>(null);
   const controlsRef = useRef<ControlsHandle | null>(null);
+  const controllerRef = useRef<AbortController | null>(null);
 
-  // UI state
+  // UI State
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query, 500);
   const [sort, setSort] = useState<"best" | "stars" | "updated">("best");
@@ -33,34 +38,31 @@ export default function Home() {
   const [page, setPage] = useState(1);
   const [language, setLanguage] = useState<string>("");
 
-  // Hidratação concluída?
+  // Hidratação (somente após ler URL/localStorage)
   const [hydrated, setHydrated] = useState(false);
 
-  // Dados / estados de rede
+  // Dados e estados de rede
   const [data, setData] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [errorCode, setErrorCode] = useState<number | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+
+  // Rate-limit (opcional – útil pra feedback ao usuário)
   const [rate, setRate] = useState<{ limit?: number; remaining?: number; reset?: number }>({});
 
-  // Token (usado apenas se a feature estiver ligada)
+  // Token (apenas usado se a feature estiver ligada)
   const { token } = usePatToken();
   const tokenUsed = FEATURES.PAT ? token : "";
 
-  // Resetar página quando filtros mudam
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedQuery, perPage, sort, order, language]);
-
-  // -----------------------------
-  // (1) Hidratar estado uma única vez: URL > localStorage > defaults
-  // -----------------------------
+  // --------------------------------------------
+  // Hidratar estado via URL + localStorage (1x)
+  // --------------------------------------------
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const sp = new URLSearchParams(window.location.search);
-    const stored = readPrefs();
+    const stored = readPrefs(); // prefs do localStorage
 
+    // Preferência: URL > localStorage > defaults (clampPrefs valida)
     const clamped = clampPrefs({
       sort: (sp.get("sort") ?? stored.sort) as any,
       order: (sp.get("order") ?? stored.order) as any,
@@ -72,28 +74,33 @@ export default function Home() {
     const pg = Number(sp.get("page") ?? 1);
 
     setQuery(q);
-    setSort(clamped.sort);
-    setOrder(clamped.order);
-    setPerPage(clamped.perPage);
+    setSort(ALLOWED_SORT.has(clamped.sort) ? clamped.sort : "best");
+    setOrder(ALLOWED_ORDER.has(clamped.order) ? clamped.order : "desc");
+    setPerPage(ALLOWED_PER_PAGE.includes(clamped.perPage as any) ? clamped.perPage : 10);
     setLanguage(clamped.language);
     setPage(Number.isFinite(pg) && pg >= 1 ? pg : 1);
 
-    setHydrated(true); // 🔑 libera fetch/URL sync
+    setHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // -----------------------------
-  // (2) Persistir preferências no localStorage (após hidratar)
-  // -----------------------------
+  // Persistir preferências quando mudarem (exceto query/page)
   useEffect(() => {
     if (!hydrated) return;
     writePrefs({ sort, order, perPage, language });
-  }, [hydrated, sort, order, perPage, language]);
+  }, [sort, order, perPage, language, hydrated]);
 
-  // -----------------------------
-  // (3) URL derivada do estado (estado → URL) antes das asserções dos testes
-  // -----------------------------
-  useLayoutEffect(() => {
-    if (!hydrated || typeof window === "undefined") return;
+  // Resetar página quando filtros mudam (após hidratar)
+  useEffect(() => {
+    if (!hydrated) return;
+    setPage(1);
+  }, [debouncedQuery, perPage, sort, order, language, hydrated]);
+
+  // --------------------------------------------
+  // Sincronizar a URL (replaceState) com o estado
+  // --------------------------------------------
+  useEffect(() => {
+    if (typeof window === "undefined" || !hydrated) return;
 
     const sp = new URLSearchParams();
     if (debouncedQuery) sp.set("q", debouncedQuery);
@@ -105,18 +112,18 @@ export default function Home() {
     if (page !== 1) sp.set("page", String(page));
     if (language) sp.set("lang", language);
 
-    const base = new URL(window.location.href);
-    base.search = sp.toString();
-    const target = base.toString();
+    const next = sp.toString();
+    const target = next ? `${window.location.pathname}?${next}` : window.location.pathname;
+    const current = window.location.pathname + window.location.search;
 
-    if (target !== window.location.href) {
-      window.history.replaceState(null, "", target);
+    if (target !== current) {
+      history.replaceState(null, "", target);
     }
-  }, [hydrated, debouncedQuery, sort, order, perPage, page, language]);
+  }, [debouncedQuery, sort, order, perPage, page, language, hydrated]);
 
-  // -----------------------------
-  // (4) URL de busca para o fetch
-  // -----------------------------
+  // --------------------------------------------
+  // Construir a URL de busca da API (memo)
+  // --------------------------------------------
   const requestUrl = useMemo(() => {
     const q = buildSearchQ(debouncedQuery, language);
     const params = new URLSearchParams();
@@ -125,18 +132,18 @@ export default function Home() {
       params.set("sort", sort);
       params.set("order", order);
     }
-    if (perPage !== 10) params.set("per_page", String(perPage));
-    if (page !== 1) params.set("page", String(page));
+    params.set("per_page", String(perPage));
+    params.set("page", String(page));
     return `https://api.github.com/search/repositories?${params.toString()}`;
   }, [debouncedQuery, language, sort, order, perPage, page]);
 
-  // -----------------------------
-  // (5) Fetch com cancelamento e captura de rate-limit
-  // -----------------------------
+  // --------------------------------------------
+  // Fetch com cancelamento + captura de rate-limit
+  // --------------------------------------------
   useEffect(() => {
-    if (!hydrated) return; // só busca após hidratar
+    if (!hydrated) return;
+
     setError(null);
-    setErrorCode(undefined);
     setLoading(true);
 
     controllerRef.current?.abort();
@@ -164,17 +171,13 @@ export default function Home() {
             const when = new Date(reset * 1000);
             details = ` — limite reinicia em ${when.toLocaleString("pt-BR")}`;
           }
-          setErrorCode(403);
           throw new Error(`Limite da Search API atingido${details}.`);
         }
-        if (!res.ok) {
-          setErrorCode(res.status);
-          throw new Error(`Erro ${res.status}: ${res.statusText}`);
-        }
+        if (!res.ok) throw new Error(`Erro ${res.status}: ${res.statusText}`);
         const json = (await res.json()) as SearchResponse;
         return json;
       })
-      .then(setData)
+      .then((json) => setData(json))
       .catch((err) => {
         if ((err as any).name !== "AbortError") setError((err as Error).message);
       })
@@ -183,17 +186,19 @@ export default function Home() {
     return () => controller.abort();
   }, [requestUrl, tokenUsed, hydrated]);
 
-  // foco no título dos resultados quando há dados
+  // Acessibilidade: focar título após carregar resultados
   useEffect(() => {
     if (!loading && (data?.items?.length ?? 0) > 0) {
       resultsHeadingRef.current?.focus();
     }
   }, [loading, data]);
 
-  // Paginação windowed
+  // --------------------------------------------
+  // Paginação (windowed)
+  // --------------------------------------------
   const totalCount = data?.total_count ?? 0;
   const totalPages = useMemo(() => {
-    const HARD_LIMIT = 1000;
+    const HARD_LIMIT = 1000; // limite da Search API
     const byPerPage = Math.ceil(totalCount / perPage);
     const apiLimit = Math.ceil(HARD_LIMIT / perPage);
     return Math.max(1, Math.min(byPerPage, apiLimit));
@@ -202,6 +207,50 @@ export default function Home() {
   const pages = useMemo(() => pageWindow(page, totalPages, 2), [page, totalPages]);
   const canPrev = page > 1;
   const canNext = page < totalPages;
+
+  // --------------------------------------------
+  // Atalhos de teclado
+  // --------------------------------------------
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      // Ctrl/Cmd + K → foca a busca
+      if ((e.key === "k" || e.key === "K") && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        controlsRef.current?.focusSearch();
+        return;
+      }
+
+      // Esc → limpa a busca
+      if (e.key === "Escape" && query) {
+        e.preventDefault();
+        controlsRef.current?.clearSearch();
+        return;
+      }
+
+      // ← / → → paginação
+      if (e.key === "ArrowRight" && canNext) {
+        e.preventDefault();
+        setPage((p) => Math.min(totalPages, p + 1));
+        return;
+      }
+      if (e.key === "ArrowLeft" && canPrev) {
+        e.preventDefault();
+        setPage((p) => Math.max(1, p - 1));
+        return;
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [query, canNext, canPrev, totalPages]);
+
+  // --------------------------------------------
+  // PERFORMANCE: lista deferida + memoizada
+  // --------------------------------------------
+  const deferredData = useDeferredValue(data);
+  const repoCards = useMemo(() => {
+    return deferredData?.items?.map((repo) => <RepoCard key={repo.id} repo={repo} />) ?? null;
+  }, [deferredData]);
 
   return (
     <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
@@ -262,7 +311,7 @@ export default function Home() {
           {error && <span className="text-red-400">{error}</span>}
         </div>
 
-        {/* Auth / Rate info */}
+        {/* Auth/Rate Info */}
         {(rate.limit !== undefined || rate.remaining !== undefined) && (
           <div className="mt-1 text-xs text-neutral-500">
             {token ? "Autenticação: ativa" : "Autenticação: anônima"} •
@@ -283,7 +332,7 @@ export default function Home() {
 
         {/* RESULTADOS */}
         <section className="mt-4 grid gap-3 w-full">
-          {(!loading && data?.items?.length === 0) && (
+          {!loading && data?.items?.length === 0 && (
             <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-neutral-300">
               Nenhum repositório encontrado.
             </div>
@@ -298,12 +347,8 @@ export default function Home() {
             Resultados
           </h2>
 
-          {/* Lista de repositórios */}
-          {data?.items?.map((repo) => (
-            <RepoCard key={repo.id} repo={repo} />
-          ))}
+          {repoCards}
 
-          {/* Skeletons */}
           {loading && (
             <div className="grid gap-3">
               {Array.from({ length: 6 }).map((_, i) => (
