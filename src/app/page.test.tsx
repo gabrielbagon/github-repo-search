@@ -133,5 +133,59 @@ describe("Home page", () => {
 			"Bearer github_pat_TESTE1234567890"
 		);
  });
+ 
+// helper robusto para mockar fetch N vezes
+function mockFetchAll(status: number, body: any, headers: Record<string, string> = {}) {
+  (global.fetch as any) = vi.fn().mockResolvedValue({
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: String(status),
+    json: async () => body,
+    headers: {
+      get: (k: string) => headers[k.toLowerCase()] ?? null,
+    },
+  });
+}
+
+describe("Home page - estados de erro e empty", () => {
+  it("exibe estado de erro com dica quando rate-limit 403", async () => {
+    mockFetchAll(
+      403,
+      { message: "rate limited" },
+      {
+        "x-ratelimit-limit": "10",
+        "x-ratelimit-remaining": "0",
+        "x-ratelimit-reset": String(Math.floor(Date.now() / 1000) + 60),
+      }
+    );
+
+    render(<Home />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/limite da search api atingido/i);
+    expect(alert).toHaveTextContent(/adicione um pat/i);
+  });
+
+  it("exibe empty state quando busca não retorna resultados", async () => {
+  // A API retorna zero itens
+  mockFetchAll(200, { total_count: 0, items: [] });
+
+  render(<Home />);
+
+  // Digita uma busca para acionar o fluxo de empty state “com query”
+  const search = screen.getByRole("searchbox", { name: /buscar repositórios/i });
+  await userEvent.type(search, "nothing-here");
+
+  // Espera pela mensagem de “nenhum resultado”
+  await waitFor(
+    () => {
+      expect(
+        screen.getByText(/nenhum repositório encontrado/i)
+      ).toBeInTheDocument();
+    },
+    { timeout: 2000 } // margem para o debounce
+  );
+})
+}); 
 
 });
