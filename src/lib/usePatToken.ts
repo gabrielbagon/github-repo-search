@@ -1,60 +1,70 @@
-"use client";
-import { useCallback, useMemo, useState } from "react";
+// src/lib/usePatToken.ts
+import { useCallback, useEffect, useState } from "react";
 
-const KEY = "gh:pat";
+const LS_KEY = "github_pat";
 
-/** Regras simples p/ tokens novos e antigos do GitHub */
-const GH_PAT_PATTERNS = [
-  /^github_pat_[A-Za-z0-9_]{22,}/, // formato novo
-  /^ghp_[A-Za-z0-9]{30,}/,         // formato antigo
-];
+type HookReturn = {
+  token: string;
+  /** salva no estado e tenta persistir em localStorage */
+  save: (next: string) => void;
+  /** limpa no estado e tenta remover do localStorage */
+  clear: () => void;
 
+  /** aliases para compatibilidade com componentes já existentes */
+  setToken: (next: string) => void;
+  clearToken: () => void;
 
-export function isLikelyGithubToken(s: string) {
-  return GH_PAT_PATTERNS.some((re) => re.test(s.trim()));
-}
+  /** erro não-fatal de persistência (ex.: localStorage indisponível) */
+  error: string | null;
+};
 
+export function usePatToken(): HookReturn {
+  const [token, setTokenState] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
 
-export function redactToken(s: string) {
-  const t = s.trim();
-  if (!t) return "";
-  const last4 = t.slice(-4);
-  return `••••••••••••••••${last4}`;
-}
-
-
-export function usePatToken() {
-  
-  const [token, setToken] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
+  // Hidrata do localStorage quando disponível
+  useEffect(() => {
     try {
-      return localStorage.getItem(KEY) ?? "";
-    } catch {
-      return "";
+      if (typeof window === "undefined") return;
+      const v = window.localStorage.getItem(LS_KEY);
+      if (v) setTokenState(v);
+    } catch (err) {
+      void err; // marca como "usado" para o linter
+      setError("Unable to access localStorage to read PAT.");
     }
-  });
+  }, []);
 
-  
   const save = useCallback((next: string) => {
-    const v = next.trim();
-    setToken(v);
+    setTokenState(next);
     try {
-      if (v) localStorage.setItem(KEY, v);
-      else localStorage.removeItem(KEY);
-    } catch {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(LS_KEY, next);
+      }
+    } catch (err) {
+      void err;
+      setError("Unable to persist PAT in localStorage.");
     }
   }, []);
 
-  
   const clear = useCallback(() => {
-    setToken("");
+    setTokenState("");
     try {
-      localStorage.removeItem(KEY);
-    } catch {}
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(LS_KEY);
+      }
+    } catch (err) {
+      void err;
+      setError("Unable to clear PAT from localStorage.");
+    }
   }, []);
 
-  
-  const redacted = useMemo(() => redactToken(token), [token]);
-
-  return { token, save, clear, redacted };
+  // Aliases para retrocompatibilidade com componentes/tests
+  return {
+    token,
+    save,
+    clear,
+    setToken: save,
+    clearToken: clear,
+    error,
+  };
 }

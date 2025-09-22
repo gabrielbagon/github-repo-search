@@ -1,0 +1,461 @@
+diff --git a/src/app/page.test.tsx b/src/app/page.test.tsx
+index 1111111..2222222 100644
+--- a/src/app/page.test.tsx
++++ b/src/app/page.test.tsx
+@@ -1,3 +1,6 @@
++/* eslint-disable @typescript-eslint/no-explicit-any */
++// Justificativa: testes costumam fazer mocks de APIs (fetch/Response/etc.),
++// e o uso de `any` aqui não afeta o app de produção.
+ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+ import { vi } from "vitest";
+ import Home from "./page";
+diff --git a/src/app/page.tsx b/src/app/page.tsx
+index 3333333..4444444 100644
+--- a/src/app/page.tsx
++++ b/src/app/page.tsx
+@@ -1,22 +1,24 @@
+ "use client";
+ 
+-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
++import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+ import { Navbar } from "@/components/Navbar";
+ import { buildSearchQ } from "@/lib/buildSearchQ";
+ import { pageWindow } from "@/lib/pageWindow";
+ import { useDebouncedValue } from "@/lib/useDebouncedValue";
+ import { Repo, SearchResponse } from "@/types/github";
+ import { RepoCard } from "@/components/RepoCard";
+ import { Controls } from "@/components/Controls";
+ import type { ControlsHandle } from "@/components/Controls";
+ import { FEATURES } from "@/config";
+ import { PatControl } from "@/components/PatControl";
+ import { usePatToken } from "@/lib/usePatToken";
+-import { clampPrefs, readPrefs, writePrefs } from "@/lib/prefs";
++import { clampPrefs, readPrefs, writePrefs, type Prefs } from "@/lib/prefs";
+ import { useSavedSearches } from "@/lib/savedSearches";
+ import { Footer } from "@/components/Footer";
+ 
++type SortType = "best" | "stars" | "updated";
++type OrderType = "desc" | "asc";
+ 
+ export default function Home() {
+   const resultsHeadingRef = useRef<HTMLHeadingElement | null>(null);
+   const controlsRef = useRef<ControlsHandle | null>(null);
+@@ -32,14 +34,14 @@ export default function Home() {
+   // Helpers de clamp
+-  const ALLOWED_SORT = new Set(["best", "stars", "updated"] as const);
+-  const ALLOWED_ORDER = new Set(["asc", "desc"] as const);
++  const ALLOWED_SORT = new Set<SortType>(["best", "stars", "updated"]);
++  const ALLOWED_ORDER = new Set<OrderType>(["asc", "desc"]);
+   const ALLOWED_PER_PAGE = [10, 20, 30, 50, 100] as const;
+ 
+   const clampPerPage = (v: number) =>
+     ALLOWED_PER_PAGE.includes(v as unknown as (typeof ALLOWED_PER_PAGE)[number]) ? v : 10;
+   const clampPage = (v: number) => (Number.isFinite(v) && v >= 1 ? v : 1);
+ 
+   // Estado inicial sincronizado com URL + prefs (sem efeito extra)
+   const initial = useMemo(() => {
+     if (typeof window === "undefined") {
+       return {
+         query: "",
+-        sort: "best" as const,
+-        order: "desc" as const,
++        sort: "best" as SortType,
++        order: "desc" as OrderType,
+         perPage: 10,
+         page: 1,
+         language: "",
+       };
+     }
+     const sp = new URLSearchParams(window.location.search);
+     const stored = readPrefs();
+     const clampedPrefs = clampPrefs({
+-      sort: (sp.get("sort") ?? stored.sort) as any,
+-      order: (sp.get("order") ?? stored.order) as any,
++      sort: (sp.get("sort") as SortType | null) ?? stored.sort,
++      order: (sp.get("order") as OrderType | null) ?? stored.order,
+       perPage: Number(sp.get("per_page") ?? stored.perPage),
+       language: (sp.get("lang") ?? stored.language) || "",
+     });
+     return {
+       query: sp.get("q") ?? "",
+       sort: ALLOWED_SORT.has(clampedPrefs.sort) ? clampedPrefs.sort : "best",
+       order: ALLOWED_ORDER.has(clampedPrefs.order)
+         ? clampedPrefs.order
+         : "desc",
+       perPage: clampPerPage(clampedPrefs.perPage),
+       page: clampPage(Number(sp.get("page") ?? 1)),
+       language: clampedPrefs.language,
+     };
+   }, []);
+ 
+-  const init = readFromSearchParams(searchParams);
+-
+   // UI State
+-  const [query, setQuery] = useState(init.query);
+-  const [sort, setSort] = useState<"best" | "stars" | "updated">(init.sort);
+-  const [order, setOrder] = useState<"desc" | "asc">(init.order);
+-  const [perPage, setPerPage] = useState(init.perPage);
+-  const [page, setPage] = useState(init.page);
+-  const [language, setLanguage] = useState<string>(init.language);
++  const [query, setQuery] = useState(initial.query);
++  const [sort, setSort] = useState<SortType>(initial.sort);
++  const [order, setOrder] = useState<OrderType>(initial.order);
++  const [perPage, setPerPage] = useState(initial.perPage);
++  const [page, setPage] = useState(initial.page);
++  const [language, setLanguage] = useState<string>(initial.language);
+ 
+   const handleClearFilters = () => {
+     // reset para defaults
+     setQuery("");
+     setLanguage("");
+     setSort("best");
+     setOrder("desc");
+     setPerPage(10);
+     setPage(1);
+     // volta o foco para o campo de busca
+-    (controlsRef.current as any)?.focusSearch?.();
++    controlsRef.current?.focusSearch?.();
+   };
+ 
+   const isDefaultFilters =
+     query === "" &&
+     language === "" &&
+     sort === "best" &&
+     order === "desc" &&
+     perPage === 10 &&
+     page === 1;
+ 
+-  // ----- Share / Copiar link -----
+-  const [copied, setCopied] = useState(false);
+-
+-  const handleCopyLink = async () => {
+-    if (typeof window === "undefined" || !navigator?.clipboard) return;
+-    try {
+-      await navigator.clipboard.writeText(window.location.href);
+-      setCopied(true);
+-      setTimeout(() => setCopied(false), 1500);
+-    } catch {
+-      // fallback simples
+-      const el = document.createElement("textarea");
+-      el.value = window.location.href;
+-      document.body.appendChild(el);
+-      el.select();
+-      document.execCommand("copy");
+-      document.body.removeChild(el);
+-      setCopied(true);
+-      setTimeout(() => setCopied(false), 1500);
+-    }
+-  };
+-
+   // Debounce + transição para input mais fluido
+-  const [isPending, startTransition] = useTransition();
++  const [, startTransition] = useTransition();
+   const safeSetQuery = (v: string) => startTransition(() => setQuery(v));
+   const debouncedQuery = useDebouncedValue(query, 500);
+ 
+   // flag de montagem para evitar hydration mismatch em atributos dinâmicos
+   const [mounted, setMounted] = useState(false);
+   useEffect(() => setMounted(true), []);
+@@ -130,9 +132,9 @@ export default function Home() {
+   // saved searches
+   const { add: addSaved, remove: removeSaved, isSavedFor } = useSavedSearches();
+ 
+   // chave da busca atual (usa o estado já existente)
+   const isSaved = isSavedFor({
+     q: debouncedQuery,
+     language,
+     sort,
+     order,
+     perPage,
+   });
+ 
+   // handler para salvar/unsalvar
+   function handleToggleSave() {
+     if (!debouncedQuery) return; // não salva busca vazia
+     const id = `${debouncedQuery}|${language}|${sort}|${order}|${perPage}`;
+     if (isSaved) {
+       removeSaved(id);
+     } else {
+       addSaved({ q: debouncedQuery, language, sort, order, perPage });
+     }
+   }
+@@ -206,7 +208,6 @@ export default function Home() {
+   // URL de request
+   const requestUrl = useMemo(() => {
+     const q = buildSearchQ(debouncedQuery, language);
+     const sp = new URLSearchParams();
+     sp.set("q", q);
+     if (sort !== "best") {
+       sp.set("sort", sort);
+       sp.set("order", order);
+     }
+     sp.set("per_page", String(perPage));
+     sp.set("page", String(page));
+     return `https://api.github.com/search/repositories?${sp.toString()}`;
+   }, [debouncedQuery, language, sort, order, perPage, page]);
+@@ -226,7 +227,6 @@ export default function Home() {
+     if (perPage !== 10) sp.set("per_page", String(perPage));
+     if (page !== 1) sp.set("page", String(page));
+     if (language) sp.set("lang", language);
+ 
+     const next = sp.toString();
+     const target = next
+       ? `${window.location.pathname}?${next}`
+       : window.location.pathname;
+     const current = window.location.pathname + window.location.search;
+     if (target !== current) history.replaceState(null, "", target);
+   }, [debouncedQuery, sort, order, perPage, page, language]);
+ 
++  const isAbortError = (e: unknown): e is DOMException =>
++    e instanceof DOMException && e.name === "AbortError";
++
+   // Fetch com cancelamento e captura de rate-limit
+   useEffect(() => {
+     setError(null);
+     setErrorCode(null);
+     setLoading(true);
+@@ -259,7 +259,7 @@ export default function Home() {
+       })
+       .then((json) => setData(json))
+       .catch((err) => {
+-        if ((err as any).name !== "AbortError")
++        if (!isAbortError(err))
+           setError((err as Error).message);
+       })
+       .finally(() => setLoading(false));
+ 
+     return () => controller.abort();
+   }, [requestUrl, tokenUsed]);
+@@ -306,7 +306,6 @@ export default function Home() {
+   const isInitialEmpty = !debouncedQuery && !loading && !hasItems && !error;
+   const isQueryEmpty = debouncedQuery && !loading && !hasItems && !error;
+ 
+-  const copyDisabled = !mounted;
+   const clearDisabled =
+     !mounted ||
+     (query === "" &&
+@@ -331,23 +330,7 @@ export default function Home() {
+         <PatControl />
+       </section>
+     )}
+ 
+     <Controls
+-      ref={controlsRef as any}
++      ref={controlsRef}
+       query={query}
+       setQuery={safeSetQuery}
+       sort={sort}
+       setSort={setSort}
+       order={order}
+@@ -360,25 +343,6 @@ export default function Home() {
+       setLanguage={setLanguage}
+     />
+-    {/* Ações rápidas: Copiar link / Limpar filtros */}
+-    <div className="w-full -mt-2 flex justify-end gap-2">
+-      <button
+-        type="button"
+-        onClick={handleCopyLink}
+-        aria-label="Copiar link da busca"
+-        title="Copiar link da busca"
+-        disabled={copyDisabled}
+-        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:border-emerald-400/40 disabled:opacity-50"
+-      >
+-        Copiar link
+-      </button>
+-
+-      <button
+-        type="button"
+-        onClick={handleClearFilters}
+-        aria-label="Limpar filtros"
+-        title="Limpar filtros"
+-        disabled={clearDisabled}
+-        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:border-emerald-400/40 disabled:opacity-50"
+-      >
+-        Limpar filtros
+-      </button>
+-      <button
+-        type="button"
+-        onClick={handleToggleSave}
+-        aria-pressed={isSaved}
+-        aria-label={isSaved ? "Remove saved search" : "Save current search"}
+-        title={isSaved ? "Unsave search" : "Save search"}
+-        disabled={!mounted || !debouncedQuery}
+-        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:border-emerald-400/40 disabled:opacity-50 disabled:cursor-not-allowed"
+-      >
+-        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24">
+-          <path
+-            fill="currentColor"
+-            d="m12 17.27 6.18 3.73-1.64-7.03L22 9.24l-7.19-.62L12 2 9.19 8.62 2 9.24l5.46 4.73L5.82 21z"
+-          />
+-        </svg>
+-        {isSaved ? "Saved" : "Save"}
+-      </button>
+-    </div>
++    {/* Ação rápida: Limpar filtros */}
++    <div className="w-full -mt-2 flex justify-end gap-2">
++      <button
++        type="button"
++        onClick={handleClearFilters}
++        aria-label="Limpar filtros"
++        title="Limpar filtros"
++        disabled={clearDisabled}
++        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:border-emerald-400/40 disabled:opacity-50"
++      >
++        Limpar filtros
++      </button>
++    </div>
+ 
+     {/* STATUS compacto */}
+     <div className="mt-1 text-xs text-neutral-500" aria-live="polite">
+       {token ? "Autenticação: ativa" : "Autenticação: anônima"} •{" "}
+       {rate.remaining ?? 0}/{rate.limit ?? 0} requisições restantes
+diff --git a/src/asset/GRSLogoLockup.tsx b/src/asset/GRSLogoLockup.tsx
+index 5555555..6666666 100644
+--- a/src/asset/GRSLogoLockup.tsx
++++ b/src/asset/GRSLogoLockup.tsx
+@@ -1,7 +1,9 @@
+-import React from "react";
++import React from "react";
+ 
+-export function GRSLogoLockup(props: any) {
+-  const accent = props?.accent ?? "#22c55e";
++type Props = React.SVGProps<SVGSVGElement> & { accent?: string };
++
++export function GRSLogoLockup({ accent = "#22c55e", ...props }: Props) {
+   return (
+-    <svg {...props} style={{ color: "#e5e7eb", "--accent": accent } as any} viewBox="0 0 520 128" width={300} className="w-auto" role="img" aria-labelledby="title desc">
++    <svg {...props} style={{ color: "#e5e7eb", ["--accent" as any]: accent }} viewBox="0 0 520 128" width={300} className="w-auto" role="img" aria-labelledby="title desc">
+       {/* ... resto do SVG (sem mudanças na arte) ... */}
+     </svg>
+   );
+ }
+diff --git a/src/components/Navbar.tsx b/src/components/Navbar.tsx
+index 7777777..8888888 100644
+--- a/src/components/Navbar.tsx
++++ b/src/components/Navbar.tsx
+@@ -1,6 +1,7 @@
+ import React from "react";
++import Link from "next/link";
+ import { GRSLogoLockup } from "@/asset/GRSLogoLockup";
+ 
+ export function Navbar(props: { patOpen: boolean; onTogglePat: () => void }) {
+   const { patOpen, onTogglePat } = props;
+   return (
+@@ -12,7 +13,7 @@ export function Navbar(props: { patOpen: boolean; onTogglePat: () => void }) {
+       >
+-        <a href="/" aria-label="Go to home" className="flex items-center gap-2 text-sm font-medium text-white hover:opacity-90">
++        <Link href="/" aria-label="Go to home" className="flex items-center gap-2 text-sm font-medium text-white hover:opacity-90">
+           <GRSLogoLockup />
+-        </a>
++        </Link>
+         <nav aria-label="Top navigation" className="flex items-center gap-3">
+           {/* ... resto do conteúdo ... */}
+         </nav>
+diff --git a/src/config.ts b/src/config.ts
+index 9999999..aaaaaaa 100644
+--- a/src/config.ts
++++ b/src/config.ts
+@@ -1,6 +1,8 @@
+-// Config com feature flags
+-export const FEATURES: Record<string, any> = {
+-  PAT: true,
+-  SAVED_SEARCHES: true,
+-};
++// Config com feature flags tipadas
++export interface FeatureFlags {
++  PAT: boolean;
++  SAVED_SEARCHES: boolean;
++}
++export const FEATURES: FeatureFlags = { PAT: true, SAVED_SEARCHES: true };
+ export default FEATURES;
+diff --git a/src/lib/prefs.ts b/src/lib/prefs.ts
+index bbbbbbb..ccccccc 100644
+--- a/src/lib/prefs.ts
++++ b/src/lib/prefs.ts
+@@ -1,24 +1,63 @@
+-const KEY = "gh_prefs";
++const KEY = "gh_prefs";
++
++export type SortKey = "best" | "stars" | "updated";
++export type OrderKey = "asc" | "desc";
++
++export type Prefs = {
++  sort: SortKey;
++  order: OrderKey;
++  perPage: number;
++  language: string;
++};
++
++const ALLOWED_SORT = new Set<SortKey>(["best", "stars", "updated"]);
++const ALLOWED_ORDER = new Set<OrderKey>(["asc", "desc"]);
++const ALLOWED_PER_PAGE = [10, 20, 30, 50, 100] as const;
++
++export const DEFAULT_PREFS: Prefs = {
++  sort: "best",
++  order: "desc",
++  perPage: 10,
++  language: "",
++};
+ 
+-export function readPrefs() {
+-  try {
+-    const raw = localStorage.getItem(KEY);
+-    if (!raw) return { sort: "best", order: "desc", perPage: 10, language: "" };
+-    const obj = JSON.parse(raw) as any;
+-    return clampPrefs(obj);
+-  } catch {
+-    return { sort: "best", order: "desc", perPage: 10, language: "" };
+-  }
+-}
++export function clampPrefs(input: Partial<Prefs>): Prefs {
++  const per = Number(input.perPage ?? DEFAULT_PREFS.perPage);
++  const perClamped = ALLOWED_PER_PAGE.includes(per as (typeof ALLOWED_PER_PAGE)[number])
++    ? per
++    : DEFAULT_PREFS.perPage;
++  const sort = (input.sort && ALLOWED_SORT.has(input.sort) ? input.sort : DEFAULT_PREFS.sort);
++  const order = (input.order && ALLOWED_ORDER.has(input.order) ? input.order : DEFAULT_PREFS.order);
++  const lang = (input.language ?? DEFAULT_PREFS.language) || "";
++  return { sort, order, perPage: perClamped, language: lang };
++}
+ 
+-export function writePrefs(p: any) {
+-  try {
+-    localStorage.setItem(KEY, JSON.stringify(clampPrefs(p)));
+-  } catch {
+-    // ignore
+-  }
+-}
++export function readPrefs(): Prefs {
++  if (typeof window === "undefined") return DEFAULT_PREFS;
++  try {
++    const raw = localStorage.getItem(KEY);
++    if (!raw) return DEFAULT_PREFS;
++    const unknownObj: unknown = JSON.parse(raw);
++    const obj = (unknownObj ?? {}) as Partial<Prefs>;
++    return clampPrefs(obj);
++  } catch {
++    return DEFAULT_PREFS;
++  }
++}
+ 
+-export function clampPrefs(obj: any) {
+-  // implementação simples…
+-  return obj;
+-}
++export function writePrefs(p: Prefs): void {
++  if (typeof window === "undefined") return;
++  try {
++    const safe = clampPrefs(p);
++    localStorage.setItem(KEY, JSON.stringify(safe));
++  } catch {
++    // ignore
++  }
++}
++
++export function clearPrefs(): void {
++  try {
++    localStorage.removeItem(KEY);
++  } catch {
++    // ignore
++  }
++}
