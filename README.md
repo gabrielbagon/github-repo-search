@@ -1,36 +1,154 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GitHub Repo Search
 
-## Getting Started
+Uma interface rápida, acessível e amigável ao teclado para buscar repositórios no **GitHub**, feita com **Next.js (App Router)** e **TypeScript**.  
+A aplicação consome diretamente a **GitHub Search API**, aceita um **Personal Access Token (PAT)** opcional e mantém a URL sincronizada para facilitar o compartilhamento das buscas.
 
-First, run the development server:
+---
+
+## ✨ Funcionalidades
+
+- **Busca instantânea** com *debounce* de 500 ms + `useTransition` para digitação fluida
+- **Filtros**: linguagem, ordenação (`best`, `stars`, `updated`), direção (`asc`/`desc` quando aplicável) e resultados por página
+- **Paginação** com janela compacta (ex.: `… 3 4 [5] 6 7 …`)
+- **Deep-linking**: a URL reflete `q`, `lang`, `sort`, `order`, `per_page`, `page`
+- **Preferências no cliente**: `sort`, `order`, `perPage`, `language` persistem no `localStorage` (com *clamping*/validação)
+- **Painel de PAT (opcional)**: aumenta limites de *rate* sem precisar de backend
+- **Ações rápidas**: **Limpar filtros** e **Copiar link** da busca atual
+- **Estados polidos**: *skeleton* ao carregar, *empty states* (inicial e sem resultados) e mensagens de erro claras (com dica para 403)
+- **Acessibilidade**: *skip link*, ARIA, restaura foco no título dos resultados e *shortcuts* (⌘K/Ctrl+K, Esc, ←/→)
+- **Responsivo**: navbar fixa, controles compactos e layout confortável do mobile ao desktop
+
+> ℹ️ A antiga feature de “buscas salvas” foi **removida** para manter o build enxuto e sem riscos de *hydration mismatch*.
+
+---
+
+## 🧱 Stack
+
+- **Next.js** (App Router) + **React**
+- **TypeScript**
+- **Vitest** + **@testing-library/react**
+- **Tailwind CSS**
+
+---
+
+## 🚀 Como rodar
 
 ```bash
+# 1) Instale as dependências
+npm install
+# ou: pnpm install / yarn
+
+# 2) Dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+# 3) Testes
+npm test
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Abra http://localhost:3000
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+🔐 Usando um PAT do GitHub (opcional)
 
-## Learn More
+O uso anônimo da Search API tem limites baixos. Para ampliá-los:
 
-To learn more about Next.js, take a look at the following resources:
+Crie um Personal Access Token no GitHub (pode ser classic ou fine-grained para dados públicos).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Na app, abra o painel PAT (navbar) e cole seu token.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+O token fica apenas no navegador (opcionalmente salvo em localStorage).
 
-## Deploy on Vercel
+As requisições passam a incluir Authorization: Bearer <PAT>.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Você pode removê-lo a qualquer momento.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+🧭 Como usar
+
+Digite no campo de busca (ex.: react, next, aem).
+
+(Opcional) Selecione uma linguagem (TypeScript, JS, Python…).
+
+Mude ordenar para stars ou updated (a direção de ordenação aparece quando sort ≠ best).
+
+Use ← / → para paginar, Esc para limpar a busca, ⌘K / Ctrl+K para focar o input.
+
+Copiar link compartilha a busca atual.
+
+Limpar filtros volta aos padrões (inclui reset de página).
+
+🧩 Estrutura (alto nível)
+
+src/
+  app/
+    page.tsx              # página principal (client)
+  components/
+    Navbar.tsx
+    Controls.tsx
+    RepoCard.tsx
+    PatControl.tsx
+    Footer.tsx
+  lib/
+    buildSearchQ.ts       # monta a query da GitHub API
+    pageWindow.ts         # janela de paginação
+    useDebouncedValue.ts
+    usePatToken.ts
+    prefs.ts              # ler/gravar/validar prefs no localStorage
+  types/
+    github.ts             # tipos da API
+tests (vitest)
+
+🧪 Testes
+
+npm test
+
+Cobertura atual (principais):
+
+- montador de query, formatação de data, janela de paginação
+
+- hooks (useDebouncedValue, usePatToken)
+
+- componentes (Controls, RepoCard, Navbar)
+
+- integration da página (URL sync, filtros, paginação, erros/empty)
+
+⚙️ Configuração
+
+- Feature flags em @/config (ex.: habilitar/desabilitar PAT).
+
+- Preferências do usuário persistem em localStorage via prefs.ts (com clamping para garantir valores válidos).
+
+⚡ Performance
+
+- Debounce de 500 ms + useTransition mantêm a digitação fluida durante fetches
+
+- Cancela requisições em andamento com AbortController ao alterar filtros
+
+- useMemo para URL de busca e janela de paginação, evitando re-renders desnecessários
+
+♿ Acessibilidade
+
+- Skip link (“Pular para resultados”)
+
+- Foco retorna ao heading de resultados após o carregamento
+
+- Uso de aria-label, aria-current, aria-disabled etc.
+
+- Shortcuts: ⌘K/Ctrl+K (foco), Esc (limpa), ←/→ (paginam)
+
+🧰 Troubleshooting
+
+- Hydration mismatch: UI dependente de window, navigator ou tempo real é protegida por flags de montagem (ex.: não renderizar disabled dinâmico no SSR). Ao criar novos componentes com dados do cliente, gateie-os por mounted.
+
+- Erro 403 (rate limit): use um PAT. O status mostra restantes/limite e, quando possível, o horário de reset.
+
+📌 Roadmap (ideias)
+
+Cache local de páginas recentes
+
+Infinite scroll opcional
+
+Filtros avançados (licença, tópicos, arquivados)
+
+Exportar resultados (CSV/JSON)
+
+📝 Licença
+
+MIT — use e adapte à vontade.
