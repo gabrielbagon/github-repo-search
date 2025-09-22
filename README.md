@@ -5,6 +5,11 @@ A aplicação consome diretamente a **GitHub Search API**, aceita um **Personal 
 
 ---
 
+# Acesse o link (via Vercel)
+
+**GitHube Repo Search**: https://github-repo-search-gabriel-bagons-projects.vercel.app/
+
+
 ## ✨ Funcionalidades
 
 - **Busca instantânea** com *debounce* de 500 ms + `useTransition` para digitação fluida
