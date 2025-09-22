@@ -1,25 +1,43 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
+// eslint.config.mjs
+import js from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import nextPlugin from '@next/eslint-plugin-next';
+import reactHooks from 'eslint-plugin-react-hooks';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+export default [
+  // Ignorar pastas de build/cache
+  { ignores: ['.next/**', 'node_modules/**', 'dist/**'] },
 
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
+  // Base JS
+  js.configs.recommended,
 
-const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  // TS recomendado
+  ...tseslint.configs.recommended,
+
+  // Next (core-web-vitals)
   {
-    ignores: [
-      "node_modules/**",
-      ".next/**",
-      "out/**",
-      "build/**",
-      "next-env.d.ts",
-    ],
+    plugins: { '@next/next': nextPlugin, 'react-hooks': reactHooks },
+    rules: {
+      ...nextPlugin.configs['core-web-vitals'].rules,
+      // Garante que o plugin/react-hooks esteja disponível
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
+    },
+  },
+
+  // Relaxar regras em arquivos de teste
+  {
+    files: ['**/*.test.ts', '**/*.test.tsx', '**/vitest.setup.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+
+  // Desliga a regra de triple-slash apenas no next-env.d.ts
+  {
+    files: ['next-env.d.ts'],
+    rules: {
+      '@typescript-eslint/triple-slash-reference': 'off',
+    },
   },
 ];
-
-export default eslintConfig;

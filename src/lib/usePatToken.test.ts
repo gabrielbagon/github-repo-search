@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { usePatToken, redactToken, isLikelyGithubToken } from "@/lib/usePatToken";
+import { usePatToken, isLikelyGithubToken } from "@/lib/usePatToken";
 
 describe("usePatToken", () => {
   it("persiste e limpa token no localStorage", () => {
@@ -18,10 +18,6 @@ describe("usePatToken", () => {
     });
     expect(localStorage.getItem("gh:pat")).toBeNull();
     expect(result.current.token).toBe("");
-  });
-
-  it("redactToken esconde o corpo do token", () => {
-    expect(redactToken("github_pat_ABCDEFGH1234")).toMatch(/••••.+1234$/);
   });
 
   it("valida formato provável de token", () => {

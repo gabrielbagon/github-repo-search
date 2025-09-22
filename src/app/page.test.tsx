@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom";
 import Home from "@/app/page";
-import { __setFeatureForTests } from "@/config";
+import {  __setFeatureForTests } from "@/config";
 
 function makeResponse(items: any[], total = 42) {
   return new Response(JSON.stringify({
@@ -90,7 +90,7 @@ describe("Home page", () => {
     expect(window.location.search).toContain("page=2");
   });
  it("envia Authorization: Bearer quando PAT está salvo", async () => {
-		__setFeatureForTests("PAT", true); // ← liga a flag só para este teste
+   __setFeatureForTests("PAT", true); // ← liga a flag só para este teste
 
 		localStorage.setItem("gh:pat", "github_pat_TESTE1234567890");
 
