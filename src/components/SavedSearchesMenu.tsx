@@ -24,7 +24,7 @@ function labelFor(s: SavedSearch) {
 }
 
 export default function SavedSearchesMenu() {
-  const { list, remove } = useSavedSearches();
+  const { list = [], remove } = useSavedSearches(); // <= default []
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -35,16 +35,17 @@ export default function SavedSearchesMenu() {
     [list]
   );
 
-  // Evita hydration mismatch: não renderiza itens dinâmicos antes do mount
+  // Evita hydration mismatch no SSR
   if (!mounted) {
     return (
       <div className="relative">
         <button
           type="button"
           aria-haspopup="menu"
-          aria-expanded="false"
+          aria-expanded={false}
           title="Saved searches"
-          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs hover:border-emerald-400/40"
+          className="relative rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs hover:border-emerald-400/40"
+          disabled
         >
           Saved ▾
         </button>
@@ -52,17 +53,31 @@ export default function SavedSearchesMenu() {
     );
   }
 
+  const count = sorted.length;
+  const badgeText = count > 99 ? "99+" : String(count);
+
   return (
     <div className="relative">
       <button
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label={`Saved searches (${count})`}
         onClick={() => setOpen((v) => !v)}
-        title="Saved searches"
-        className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs hover:border-emerald-400/40"
+        title={`Saved searches (${count})`}
+        className="relative rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs hover:border-emerald-400/40"
       >
         Saved ▾
+
+        {/* Badge de contagem */}
+        {count > 0 && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -top-1 -right-1 min-w-[20px] h-[20px] rounded-full bg-emerald-500 text-black border border-emerald-300/50 text-[10px] font-semibold leading-[18px] text-center px-1"
+          >
+            {badgeText}
+          </span>
+        )}
       </button>
 
       {open && (

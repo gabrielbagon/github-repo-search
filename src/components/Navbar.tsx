@@ -40,6 +40,7 @@ export function Navbar({ patOpen, onTogglePat }: Props) {
         {/* actions */}
         <nav aria-label="Top navigation" className="flex items-center gap-3">
           <SavedSearchesMenu />
+
           {/* toggle PAT panel */}
           <button
             type="button"

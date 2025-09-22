@@ -6,7 +6,7 @@ import { Navbar } from "@/components/Navbar";
 import { buildSearchQ } from "@/lib/buildSearchQ";
 import { pageWindow } from "@/lib/pageWindow";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
-import { Repo, SearchResponse } from "@/types/github";
+import { SearchResponse } from "@/types/github";
 import { RepoCard } from "@/components/RepoCard";
 import { Controls } from "@/components/Controls";
 import type { ControlsHandle } from "@/components/Controls";
@@ -14,14 +14,13 @@ import { FEATURES } from "@/config";
 import { PatControl } from "@/components/PatControl";
 import { usePatToken } from "@/lib/usePatToken";
 import { clampPrefs, readPrefs, writePrefs } from "@/lib/prefs";
-import { useSavedSearches } from "@/lib/savedSearches";
 import { Footer } from "@/components/Footer";
 
 export default function Home() {
 	const resultsHeadingRef = useRef<HTMLHeadingElement | null>(null);
 	const controlsRef = useRef<ControlsHandle | null>(null);
 
-	// Estado para mostrar/esconder o painel PAT
+	// Mostrar/esconder o painel PAT
 	const [showPat, setShowPat] = useState<boolean>(FEATURES.PAT ?? false);
 
 	// Helpers de clamp
@@ -33,8 +32,8 @@ export default function Home() {
 		ALLOWED_PER_PAGE.includes(v as any) ? v : 10;
 	const clampPage = (v: number) => (Number.isFinite(v) && v >= 1 ? v : 1);
 
-	// Estado inicial sincronizado com URL + prefs (sem efeito extra)
-	const initial = useMemo(() => {
+	// Estado inicial: lê URL + prefs apenas no cliente para evitar hydration mismatch
+	const init = useMemo(() => {
 		if (typeof window === "undefined") {
 			return {
 				query: "",
@@ -56,9 +55,7 @@ export default function Home() {
 		return {
 			query: sp.get("q") ?? "",
 			sort: ALLOWED_SORT.has(clampedPrefs.sort) ? clampedPrefs.sort : "best",
-			order: ALLOWED_ORDER.has(clampedPrefs.order)
-				? clampedPrefs.order
-				: "desc",
+			order: ALLOWED_ORDER.has(clampedPrefs.order) ? clampedPrefs.order : "desc",
 			perPage: clampPerPage(clampedPrefs.perPage),
 			page: clampPage(Number(sp.get("page") ?? 1)),
 			language: clampedPrefs.language,
@@ -66,23 +63,46 @@ export default function Home() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	// UI State
-	const [query, setQuery] = useState(initial.query);
-	const [sort, setSort] = useState<typeof initial.sort>(initial.sort);
-	const [order, setOrder] = useState<typeof initial.order>(initial.order);
-	const [perPage, setPerPage] = useState<number>(initial.perPage);
-	const [page, setPage] = useState<number>(initial.page);
-	const [language, setLanguage] = useState<string>(initial.language);
+	// ⚠️ Defaults estáveis para SSR — nada de window aqui
+	const [query, setQuery] = useState("");
+	const [sort, setSort] = useState<"best" | "stars" | "updated">("best");
+	const [order, setOrder] = useState<"desc" | "asc">("desc");
+	const [perPage, setPerPage] = useState(10);
+	const [page, setPage] = useState(1);
+	const [language, setLanguage] = useState<string>("");
 
+	// Hidratar do URL + localStorage APÓS montar (evita hydration mismatch)
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		const sp = new URLSearchParams(window.location.search);
+		const stored = readPrefs();
+		const clampedPrefs = clampPrefs({
+			sort: (sp.get("sort") ?? stored.sort) as any,
+			order: (sp.get("order") ?? stored.order) as any,
+			perPage: Number(sp.get("per_page") ?? stored.perPage),
+			language: (sp.get("lang") ?? stored.language) || "",
+		});
+		setQuery(sp.get("q") ?? "");
+		setSort(ALLOWED_SORT.has(clampedPrefs.sort) ? clampedPrefs.sort : "best");
+		setOrder(ALLOWED_ORDER.has(clampedPrefs.order) ? clampedPrefs.order : "desc");
+		setPerPage(clampPerPage(clampedPrefs.perPage));
+		setPage(clampPage(Number(sp.get("page") ?? 1)));
+		setLanguage(clampedPrefs.language);
+    setHydrated(true);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+  useEffect(() => {
+		if (typeof window === "undefined") setHydrated(true);
+	}, []);
+
+	// Botão "Limpar filtros"
 	const handleClearFilters = () => {
-		// reset para defaults
 		setQuery("");
 		setLanguage("");
 		setSort("best");
 		setOrder("desc");
 		setPerPage(10);
 		setPage(1);
-		// volta o foco para o campo de busca
 		controlsRef.current?.focusSearch?.();
 	};
 
@@ -94,89 +114,64 @@ export default function Home() {
 		perPage === 10 &&
 		page === 1;
 
-	// ----- Share / Copiar link -----
+	// Copiar link
 	const [copied, setCopied] = useState(false);
-
 	const handleCopyLink = async () => {
 		if (typeof window === "undefined" || !navigator?.clipboard) return;
 		try {
 			await navigator.clipboard.writeText(window.location.href);
-			setCopied(true);
-			setTimeout(() => setCopied(false), 1500);
 		} catch {
-			// fallback simples
+			// fallback sem Clipboard API
 			const el = document.createElement("textarea");
 			el.value = window.location.href;
 			document.body.appendChild(el);
 			el.select();
 			document.execCommand("copy");
 			document.body.removeChild(el);
-			setCopied(true);
-			setTimeout(() => setCopied(false), 1500);
 		}
+		setCopied(true);
+		setTimeout(() => setCopied(false), 1500);
 	};
 
-	// Debounce + transição para input mais fluido
+	// Debounce + transição p/ digitação fluida
 	const [isPending, startTransition] = useTransition();
 	const safeSetQuery = (v: string) => startTransition(() => setQuery(v));
 	const debouncedQuery = useDebouncedValue(query, 500);
 
-	// flag de montagem para evitar hydration mismatch em atributos dinâmicos
+	// flag para atributos dinâmicos (disabled etc.)
 	const [mounted, setMounted] = useState(false);
 	useEffect(() => setMounted(true), []);
+  
+  const [hydrated, setHydrated] = useState(false);
 
-	// saved searches
-	const { add: addSaved, remove: removeSaved, isSavedFor } = useSavedSearches();
-
-	// chave da busca atual (usa o estado já existente)
-	const isSaved = isSavedFor({
-		q: debouncedQuery,
-		language,
-		sort,
-		order,
-		perPage,
-	});
-
-	// handler para salvar/unsalvar
-	function handleToggleSave() {
-		if (!debouncedQuery) return; // não salva busca vazia
-		const id = `${debouncedQuery}|${language}|${sort}|${order}|${perPage}`;
-		if (isSaved) {
-			removeSaved(id);
-		} else {
-			addSaved({ q: debouncedQuery, language, sort, order, perPage });
-		}
-	}
-
-	// Reset page ao mudar filtros/busca
+	// Reset page quando filtros mudam
 	useEffect(() => {
+    if (!hydrated) return;
 		setPage(1);
-	}, [debouncedQuery, perPage, sort, order, language]);
+	}, [debouncedQuery, perPage, sort, order, language, hydrated]);
+  
+  
 
 	// Persistir prefs
 	useEffect(() => {
 		writePrefs({ sort, order, perPage, language });
 	}, [sort, order, perPage, language]);
 
-	// Dados + controle de request
+	// Dados + request
 	const [data, setData] = useState<SearchResponse | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [errorCode, setErrorCode] = useState<number | null>(null);
 	const controllerRef = useRef<AbortController | null>(null);
 
-	// PAT (opcional)
+	// PAT
 	const { token } = usePatToken();
 	const tokenUsed = FEATURES.PAT ? token : "";
 
 	// Rate-limit info
-	const [rate, setRate] = useState<{
-		limit?: number;
-		remaining?: number;
-		reset?: number;
-	}>({});
+	const [rate, setRate] = useState<{ limit?: number; remaining?: number; reset?: number }>({});
 
-	// URL de request
+	// URL da Search API
 	const requestUrl = useMemo(() => {
 		const q = buildSearchQ(debouncedQuery, language);
 		const sp = new URLSearchParams();
@@ -190,7 +185,7 @@ export default function Home() {
 		return `https://api.github.com/search/repositories?${sp.toString()}`;
 	}, [debouncedQuery, language, sort, order, perPage, page]);
 
-	// Sincronizar URL (deep-linking) — roda só quando algo muda
+	// Deep-linking: sincroniza a URL do navegador
 	useEffect(() => {
 		if (typeof window === "undefined") return;
 		const sp = new URLSearchParams();
@@ -204,15 +199,15 @@ export default function Home() {
 		if (language) sp.set("lang", language);
 
 		const next = sp.toString();
-		const target = next
-			? `${window.location.pathname}?${next}`
-			: window.location.pathname;
+		const target = next ? `${window.location.pathname}?${next}` : window.location.pathname;
 		const current = window.location.pathname + window.location.search;
 		if (target !== current) history.replaceState(null, "", target);
 	}, [debouncedQuery, sort, order, perPage, page, language]);
 
 	// Fetch com cancelamento e captura de rate-limit
+  
 	useEffect(() => {
+    if (!hydrated) return;
 		setError(null);
 		setErrorCode(null);
 		setLoading(true);
@@ -221,18 +216,14 @@ export default function Home() {
 		const controller = new AbortController();
 		controllerRef.current = controller;
 
-		const headers: Record<string, string> = {
-			Accept: "application/vnd.github+json",
-		};
+		const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
 		if (tokenUsed) headers.Authorization = `Bearer ${tokenUsed}`;
 
 		fetch(requestUrl, { signal: controller.signal, headers })
 			.then(async (res) => {
 				// rate headers
 				const limit = Number(res.headers.get("x-ratelimit-limit") ?? "");
-				const remaining = Number(
-					res.headers.get("x-ratelimit-remaining") ?? ""
-				);
+				const remaining = Number(res.headers.get("x-ratelimit-remaining") ?? "");
 				const reset = Number(res.headers.get("x-ratelimit-reset") ?? "");
 				setRate({
 					limit: isFinite(limit) ? limit : undefined,
@@ -258,13 +249,12 @@ export default function Home() {
 			})
 			.then((json) => setData(json))
 			.catch((err) => {
-				if ((err as any).name !== "AbortError")
-					setError((err as Error).message);
+				if ((err as any).name !== "AbortError") setError((err as Error).message);
 			})
 			.finally(() => setLoading(false));
 
 		return () => controller.abort();
-	}, [requestUrl, tokenUsed]);
+	}, [requestUrl, tokenUsed, hydrated]);
 
 	// Foco no heading após carregar resultados
 	useEffect(() => {
@@ -282,24 +272,21 @@ export default function Home() {
 		return Math.max(1, Math.min(byPerPage, apiLimit));
 	}, [totalCount, perPage]);
 
-	const pages = useMemo(
-		() => pageWindow(page, totalPages, 2),
-		[page, totalPages]
-	);
+	const pages = useMemo(() => pageWindow(page, totalPages, 2), [page, totalPages]);
 	const canPrev = page > 1;
 	const canNext = page < totalPages;
 
-	// atalhos de teclado
+	// Atalhos de teclado
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
 			if ((e.key === "k" || e.key === "K") && (e.ctrlKey || e.metaKey)) {
 				e.preventDefault();
-				(controlsRef.current as any)?.focusSearch?.();
+				controlsRef.current?.focusSearch?.();
 				return;
 			}
 			if (e.key === "Escape" && query) {
 				e.preventDefault();
-				(controlsRef.current as any)?.clearSearch?.();
+				controlsRef.current?.clearSearch?.();
 				return;
 			}
 			if (e.key === "ArrowRight" && canNext) {
@@ -319,27 +306,28 @@ export default function Home() {
 
 	const hasItems = (data?.items?.length ?? 0) > 0;
 	const isInitialEmpty = !debouncedQuery && !loading && !hasItems && !error;
-	const isQueryEmpty = debouncedQuery && !loading && !hasItems && !error;
+	const isQueryEmpty = !!debouncedQuery && !loading && !hasItems && !error;
+
+	const clearDisabled = !mounted || isDefaultFilters;
+	const copyDisabled = !mounted;
 
 	return (
 		<div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
+			{/* Skip link */}
 			<a
 				href="#results-heading"
 				className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:bg-emerald-500 focus:text-black focus:px-3 focus:py-2 focus:rounded-lg"
 			>
 				Pular para resultados
 			</a>
+
 			{/* Navbar com toggle do PAT */}
 			<Navbar patOpen={showPat} onTogglePat={() => setShowPat((v) => !v)} />
 
 			<main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start w-full max-w-[960px]">
-				{/* PAT panel (controlado pela Navbar). Mantido aberto por padrão */}
+				{/* PAT panel */}
 				{FEATURES.PAT && showPat && (
-					<section
-						id="pat-section"
-						aria-label="Autenticação GitHub"
-						className="w-full"
-					>
+					<section id="pat-section" aria-label="Autenticação GitHub" className="w-full">
 						<PatControl />
 					</section>
 				)}
@@ -357,62 +345,30 @@ export default function Home() {
 					language={language}
 					setLanguage={setLanguage}
 				/>
-				{/* Ações rápidas: Copiar link / Limpar filtros */}
+
+				{/* Ações rápidas */}
 				<div className="w-full -mt-2 flex justify-end gap-2">
 					<button
 						type="button"
 						onClick={handleCopyLink}
 						aria-label="Copiar link da busca"
 						title="Copiar link da busca"
-						disabled={!mounted}
-						className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:border-emerald-400/40 disabled:opacity-50 disabled:cursor-not-allowed"
+						disabled={copyDisabled}
+						className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:border-emerald-400/40 disabled:opacity-50"
 					>
-						{/* ícone link */}
-						<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24">
-							<path
-								fill="currentColor"
-								d="M3.9 12a5 5 0 0 1 5-5h3v2h-3a3 3 0 0 0 0 6h3v2h-3a5 5 0 0 1-5-5Zm6-1h4v2h-4v-2Zm5.1-4h-3v2h3a3 3 0 0 1 0 6h-3v2h3a5 5 0 0 0 0-10Z"
-							/>
-						</svg>
-						{copied ? "Copiado!" : "Copiar link"}
+						{copied ? "Link copiado!" : "Copiar link"}
 					</button>
 
 					<button
 						type="button"
 						onClick={handleClearFilters}
-						disabled={isDefaultFilters}
 						aria-label="Limpar filtros"
 						title="Limpar filtros"
-						className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:border-emerald-400/40 disabled:opacity-50 disabled:cursor-not-allowed"
+						disabled={clearDisabled}
+						className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:border-emerald-400/40 disabled:opacity-50"
 					>
-						{/* ícone lixeira */}
-						<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24">
-							<path
-								fill="currentColor"
-								d="M3 6h18v2H3V6zm3 4h12l-1 10H7L6 10zm4-6h4l1 2H9l1-2z"
-							/>
-						</svg>
 						Limpar filtros
 					</button>
-					<button
-						type="button"
-						onClick={handleToggleSave}
-						aria-pressed={isSaved}
-						aria-label={isSaved ? "Remove saved search" : "Save current search"}
-						title={isSaved ? "Unsave search" : "Save search"}
-						disabled={!mounted || !debouncedQuery}
-						className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:border-emerald-400/40 disabled:opacity-50 disabled:cursor-not-allowed"
-					>
-						{/* ícone de estrela */}
-						<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24">
-							<path
-								fill="currentColor"
-								d="m12 17.27 6.18 3.73-1.64-7.03L22 9.24l-7.19-.62L12 2 9.19 8.62 2 9.24l5.46 4.73L5.82 21z"
-							/>
-						</svg>
-						{isSaved ? "Saved" : "Save"}
-					</button>
-					
 				</div>
 
 				{/* STATUS compacto */}
@@ -424,18 +380,12 @@ export default function Home() {
 				{/* EMPTY (inicial) */}
 				{isInitialEmpty && (
 					<section className="mt-4 w-full rounded-xl border border-white/10 bg-white/5 p-6">
-						<h2 className="text-base font-medium text-white">
-							Busque por repositórios
-						</h2>
+						<h2 className="text-base font-medium text-white">Busque por repositórios</h2>
 						<p className="mt-2 text-sm text-neutral-300">
-							Digite um termo no campo acima (ex.:{" "}
-							<span className="text-neutral-100">react</span>,{" "}
-							<span className="text-neutral-100">next</span>,{" "}
-							<span className="text-neutral-100">aem</span>).
+							Digite um termo no campo acima (ex.: <span className="text-neutral-100">react</span>,{" "}
+							<span className="text-neutral-100">next</span>, <span className="text-neutral-100">aem</span>).
 						</p>
-						<p className="mt-2 text-xs text-neutral-400">
-							Dica: use o filtro de linguagem para refinar os resultados.
-						</p>
+						<p className="mt-2 text-xs text-neutral-400">Dica: use o filtro de linguagem para refinar os resultados.</p>
 					</section>
 				)}
 
@@ -448,8 +398,8 @@ export default function Home() {
 						<p className="text-sm">{error}</p>
 						{errorCode === 403 && (
 							<p className="mt-2 text-xs text-red-300">
-								Dica: a Search API do GitHub é limitada para usuários anônimos.
-								Adicione um <strong>PAT</strong> para elevar seu limite.
+								Dica: a Search API do GitHub é limitada para usuários anônimos. Adicione um <strong>PAT</strong> para elevar seu
+								limite.
 							</p>
 						)}
 					</section>
@@ -457,24 +407,18 @@ export default function Home() {
 
 				{/* RESULTADOS / EMPTY(query) / SKELETON */}
 				<section className="mt-4 grid gap-3 w-full">
-					<h2
-						id="results-heading"
-						ref={resultsHeadingRef}
-						tabIndex={-1}
-						className="sr-only text-white"
-					>
+					<h2 id="results-heading" ref={resultsHeadingRef} tabIndex={-1} className="sr-only text-white">
 						Resultados
 					</h2>
 
-					{/* EMPTY de busca sem resultados */}
+					{/* EMPTY da busca sem resultados */}
 					{isQueryEmpty && (
 						<div className="rounded-xl border border-white/10 bg-white/5 p-6 text-neutral-300">
 							Nenhum repositório encontrado
 							{debouncedQuery ? (
 								<>
 									{" "}
-									para{" "}
-									<span className="text-neutral-100">“{debouncedQuery}”</span>
+									para <span className="text-neutral-100">“{debouncedQuery}”</span>
 									{language && (
 										<>
 											{" "}
@@ -486,36 +430,34 @@ export default function Home() {
 							) : (
 								"."
 							)}
-							<div className="mt-2 text-sm text-neutral-400">
-								Tente alterar os filtros, trocar a linguagem ou usar outro
-								termo.
-							</div>
+							<div className="mt-2 text-sm text-neutral-400">Tente alterar os filtros, trocar a linguagem ou usar outro termo.</div>
 						</div>
 					)}
 
 					{/* Lista */}
-					{!loading &&
-						hasItems &&
-						data?.items?.map((repo) => <RepoCard key={repo.id} repo={repo} />)}
+					{data?.items?.map((repo) => (
+						<RepoCard key={repo.id} repo={repo} />
+					))}
+
+					{/* Empty explícito (zero itens) */}
+					{!loading && data && data.items.length === 0 && (
+						<div className="rounded-xl border border-white/10 bg-white/5 p-6 text-neutral-300">
+							Nenhum repositório encontrado.
+						</div>
+					)}
 
 					{/* Skeleton */}
 					{loading && (
 						<div className="grid gap-3">
 							{Array.from({ length: 6 }).map((_, i) => (
-								<div
-									key={i}
-									className="h-24 animate-pulse rounded-xl bg-white/5"
-								/>
+								<div key={i} className="h-24 animate-pulse rounded-xl bg-white/5" />
 							))}
 						</div>
 					)}
 				</section>
 
 				{/* Paginação */}
-				<nav
-					className="mt-6 flex items-center justify-between gap-4 w-full"
-					aria-label="Paginação de resultados"
-				>
+				<nav className="mt-6 flex items-center justify-between gap-4 w-full" aria-label="Paginação de resultados">
 					<button
 						type="button"
 						disabled={!canPrev}
@@ -529,11 +471,7 @@ export default function Home() {
 
 					<div className="flex items-center gap-1">
 						{pages[0] > 1 && (
-							<button
-								type="button"
-								onClick={() => setPage(1)}
-								className="px-3 py-2 text-sm rounded-lg hover:bg-white/5"
-							>
+							<button type="button" onClick={() => setPage(1)} className="px-3 py-2 text-sm rounded-lg hover:bg-white/5">
 								1…
 							</button>
 						)}
@@ -543,19 +481,13 @@ export default function Home() {
 								type="button"
 								onClick={() => setPage(p)}
 								aria-current={p === page ? "page" : undefined}
-								className={`px-3 py-2 text-sm rounded-lg hover:bg-white/5 ${
-									p === page ? "bg-emerald-500/20 text-emerald-200" : ""
-								}`}
+								className={`px-3 py-2 text-sm rounded-lg hover:bg-white/5 ${p === page ? "bg-emerald-500/20 text-emerald-200" : ""}`}
 							>
 								{p}
 							</button>
 						))}
 						{pages[pages.length - 1] < totalPages && (
-							<button
-								type="button"
-								onClick={() => setPage(totalPages)}
-								className="px-3 py-2 text-sm rounded-lg hover:bg-white/5"
-							>
+							<button type="button" onClick={() => setPage(totalPages)} className="px-3 py-2 text-sm rounded-lg hover:bg-white/5">
 								…{totalPages}
 							</button>
 						)}
@@ -573,6 +505,7 @@ export default function Home() {
 					</button>
 				</nav>
 			</main>
+
 			<Footer />
 		</div>
 	);
