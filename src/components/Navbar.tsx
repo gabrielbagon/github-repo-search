@@ -4,6 +4,7 @@
 import { useMemo } from "react";
 import { usePatToken } from "@/lib/usePatToken";
 import { GRSLogoLockup } from "@/asset/GRSLogoLockup";
+import SavedSearchesMenu from "@/components/SavedSearchesMenu";
 
 type Props = {
   patOpen: boolean;
@@ -38,6 +39,7 @@ export function Navbar({ patOpen, onTogglePat }: Props) {
 
         {/* actions */}
         <nav aria-label="Top navigation" className="flex items-center gap-3">
+          <SavedSearchesMenu />
           {/* toggle PAT panel */}
           <button
             type="button"
