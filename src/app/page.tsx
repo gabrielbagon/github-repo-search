@@ -19,10 +19,15 @@ import { Footer } from "@/components/Footer";
 export default function Home() {
 	const resultsHeadingRef = useRef<HTMLHeadingElement | null>(null);
 	const controlsRef = useRef<ControlsHandle | null>(null);
+  
 
 	// Estado para mostrar/esconder o painel PAT
 	const [showPat, setShowPat] = useState<boolean>(FEATURES.PAT ?? false);
-
+// Evita hydration mismatch em atributos que dependem de APIs do browser
+  const [mounted, setMounted] = useState(false);
+useEffect(() => {
+  setMounted(true);
+}, []);
 	// Helpers de clamp
 	const ALLOWED_SORT = new Set(["best", "stars", "updated"] as const);
 	const ALLOWED_ORDER = new Set(["asc", "desc"] as const);
@@ -92,6 +97,28 @@ export default function Home() {
 		order === "desc" &&
 		perPage === 10 &&
 		page === 1;
+
+	// ----- Share / Copiar link -----
+	const [copied, setCopied] = useState(false);
+
+	const handleCopyLink = async () => {
+		if (typeof window === "undefined" || !navigator?.clipboard) return;
+		try {
+			await navigator.clipboard.writeText(window.location.href);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 1500);
+		} catch {
+			// fallback simples
+			const el = document.createElement("textarea");
+			el.value = window.location.href;
+			document.body.appendChild(el);
+			el.select();
+			document.execCommand("copy");
+			document.body.removeChild(el);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 1500);
+		}
+	};
 
 	// Debounce + transição para input mais fluido
 	const [isPending, startTransition] = useTransition();
@@ -307,8 +334,26 @@ export default function Home() {
 					language={language}
 					setLanguage={setLanguage}
 				/>
-				{/* Botão: Limpar filtros */}
-				<div className="w-full -mt-2 flex justify-end">
+				{/* Ações rápidas: Copiar link / Limpar filtros */}
+				<div className="w-full -mt-2 flex justify-end gap-2">
+					<button
+						type="button"
+						onClick={handleCopyLink}
+						aria-label="Copiar link da busca"
+						title="Copiar link da busca"
+						 disabled={!mounted}
+						className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:border-emerald-400/40 disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						{/* ícone link */}
+						<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24">
+							<path
+								fill="currentColor"
+								d="M3.9 12a5 5 0 0 1 5-5h3v2h-3a3 3 0 0 0 0 6h3v2h-3a5 5 0 0 1-5-5Zm6-1h4v2h-4v-2Zm5.1-4h-3v2h3a3 3 0 0 1 0 6h-3v2h3a5 5 0 0 0 0-10Z"
+							/>
+						</svg>
+						{copied ? "Copiado!" : "Copiar link"}
+					</button>
+
 					<button
 						type="button"
 						onClick={handleClearFilters}
@@ -317,7 +362,13 @@ export default function Home() {
 						title="Limpar filtros"
 						className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:border-emerald-400/40 disabled:opacity-50 disabled:cursor-not-allowed"
 					>
-						{/* ícone simples (opcional) */}
+						{/* ícone lixeira */}
+						<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24">
+							<path
+								fill="currentColor"
+								d="M3 6h18v2H3V6zm3 4h12l-1 10H7L6 10zm4-6h4l1 2H9l1-2z"
+							/>
+						</svg>
 						Limpar filtros
 					</button>
 				</div>
