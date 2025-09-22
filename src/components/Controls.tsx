@@ -1,11 +1,18 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useRef } from "react";
+import {
+	forwardRef,
+	useImperativeHandle,
+	useRef,
+	useEffect,
+	useState,
+} from "react";
 
 export type ControlsHandle = {
 	focusSearch: () => void;
 	clearSearch: () => void;
 };
+
 // 1) lista de linguagens simples
 const LANGS = [
 	"",
@@ -64,43 +71,47 @@ export const Controls = forwardRef<ControlsHandle, Props>(function Controls(
 		[setQuery]
 	);
 
+	const [mounted, setMounted] = useState(false);
+	useEffect(() => setMounted(true), []);
+
 	return (
-		<div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
-			{/* INPUT DE BUSCA */}
-			<div className="flex-1 relative">
+		<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto] items-start gap-3 sm:gap-4 w-full">
+ 			 <div className="relative min-w-0 sm:col-span-2 lg:col-span-1">
 				<label htmlFor="search" className="sr-only">
 					Buscar repositórios
 				</label>
+
 				<input
 					id="search"
-					ref={inputRef} // (2) conecta a ref ao input
 					type="search"
 					value={query}
 					onChange={(e) => setQuery(e.target.value)}
 					placeholder="Digite um termo (ex: react, next, aem)"
 					className="w-full rounded-2xl bg-white/5 border border-white/10 px-4 py-3 pr-10 text-base focus:outline-none focus:ring-2 focus:ring-emerald-400/50 placeholder:text-neutral-500"
 				/>
-				{query && (
-					<button
-						type="button"
-						onClick={() => {
-							setQuery("");
-							inputRef.current?.focus();
-						}} // (3) mantém UX
-						className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-200"
-						aria-label="Limpar busca"
-					>
-						×
-					</button>
-				)}
+
+				{/* botão de limpar (X) */}
+				<button
+					type="button"
+					onClick={() => {
+						setQuery("");
+						// se tiver callback pra resetar página/filtros, chame aqui
+					}}
+					className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-200"
+					aria-label="Limpar busca"
+					// Mantém o nó no SSR e no primeiro render do cliente
+					style={{ visibility: query ? "visible" : "hidden" }}
+				>
+					×
+				</button>
 			</div>
 
 			{/* (A.1) ← AQUI entra o BLOCO DE LINGUAGEM */}
-			<div className="flex items-center gap-2">
+			<div className="flex items-center gap-2 w-full sm:w-auto">
 				<label htmlFor="language" className="text-sm text-neutral-400">
 					Linguagem:
 				</label>
-				<select
+				<select 
 					id="language"
 					value={language}
 					onChange={(e) => setLanguage(e.target.value)}
@@ -115,7 +126,7 @@ export const Controls = forwardRef<ControlsHandle, Props>(function Controls(
 			</div>
 
 			{/* (B) ORDENAR */}
-			<div className="flex items-center gap-2">
+			<div className="flex items-center gap-2 w-full sm:w-auto">
 				<label htmlFor="sort" className="text-sm text-neutral-400">
 					Ordenar:
 				</label>
@@ -132,25 +143,27 @@ export const Controls = forwardRef<ControlsHandle, Props>(function Controls(
 			</div>
 
 			{/* (C) ORDEM (condicional) */}
-			{sort !== "best" && (
-				<div className="flex items-center gap-2">
-					<label htmlFor="order" className="text-sm text-neutral-400">
-						Ordem:
-					</label>
-					<select
-						id="order"
-						value={order}
-						onChange={(e) => setOrder(e.target.value as Order)}
-						className="rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/50"
-					>
-						<option value="desc">Desc</option>
-						<option value="asc">Asc</option>
-					</select>
-				</div>
-			)}
+			<div className="flex items-center gap-2 w-full sm:w-auto">
+				<label htmlFor="order" className="text-sm text-neutral-400">
+					Ordem:
+				</label>
+				<select
+					id="order"
+					value={order}
+					onChange={(e) => setOrder(e.target.value as "asc" | "desc")}
+					// Evita mismatch: no SSR e no primeiro render no cliente fica desabilitado,
+					// depois do mount muda para (sort === "best")
+					disabled={!mounted || sort === "best"}
+					aria-disabled={!mounted || sort === "best"}
+					className="rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/50 disabled:opacity-50 disabled:cursor-not-allowed"
+				>
+					<option value="desc">Desc.</option>
+					<option value="asc">Asc.</option>
+				</select>
+			</div>
 
 			{/* (D) POR PÁGINA */}
-			<div className="flex items-center gap-2">
+			<div className="flex items-center gap-2 w-full sm:w-auto">
 				<label htmlFor="perPage" className="text-sm text-neutral-400">
 					Por página:
 				</label>
@@ -158,7 +171,7 @@ export const Controls = forwardRef<ControlsHandle, Props>(function Controls(
 					id="perPage"
 					value={perPage}
 					onChange={(e) => setPerPage(Number(e.target.value))}
-					className="rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/50"
+					className="w-full sm:w-auto rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/50"
 				>
 					{[10, 20, 30, 50, 100].map((n) => (
 						<option key={n} value={n}>

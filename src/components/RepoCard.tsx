@@ -15,18 +15,18 @@ export function RepoCard({ repo }: { repo: Repo }) {
     <article
       className="rounded-xl border border-white/10 bg-white/5 p-4 hover:border-emerald-400/40 transition-colors"
     >
-      <div className="flex items-start gap-4">
+      <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
         {/* Avatar do owner */}
         <img
           alt={`Avatar de ${repo.owner.login}`}              
           src={repo.owner.avatar_url}
-          className="w-12 h-12 rounded-lg object-cover"
+          className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg object-cover"
           loading="lazy"
         />
 
         {/* Conteúdo principal */}
         <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-medium truncate">
+          <h2 className="text-base sm:text-lg font-medium truncate">
             <a
               className="hover:underline underline-offset-4"
               href={repo.html_url}
@@ -40,7 +40,7 @@ export function RepoCard({ repo }: { repo: Repo }) {
 
           {/* Descrição opcional */}
           {repo.description && (
-            <p className="mt-1 text-sm text-neutral-300 line-clamp-2">
+            <p className="mt-1 text-xs sm:text-sm text-neutral-300 line-clamp-2">
               {repo.description}
             </p>
           )}

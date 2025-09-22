@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom";
 import Home from "@/app/page";
+import { __setFeatureForTests } from "@/config";
 
 function makeResponse(items: any[], total = 42) {
   return new Response(JSON.stringify({
@@ -79,7 +80,7 @@ describe("Home page", () => {
     expect(await screen.findByText("acme/widgets")).toBeInTheDocument();
 
     // clica Próxima
-    await user.click(screen.getByRole("button", { name: /próxima →/i }));
+    await user.click(screen.getByRole("button", { name: /próxima página/i }));
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledTimes(2);
@@ -88,4 +89,103 @@ describe("Home page", () => {
     // URL deve conter page=2
     expect(window.location.search).toContain("page=2");
   });
+ it("envia Authorization: Bearer quando PAT está salvo", async () => {
+		__setFeatureForTests("PAT", true); // ← liga a flag só para este teste
+
+		localStorage.setItem("gh:pat", "github_pat_TESTE1234567890");
+
+		const spy = vi.spyOn(global, "fetch").mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					total_count: 1,
+					incomplete_results: false,
+					items: [
+						{
+							id: 1,
+							full_name: "acme/widgets",
+							description: "repo de teste",
+							stargazers_count: 1,
+							html_url: "https://github.com/acme/widgets",
+							updated_at: "2024-01-02T03:04:05Z",
+							owner: { login: "acme", avatar_url: "https://example.com/a.png" },
+						},
+					],
+				}),
+				{
+					status: 200,
+					headers: {
+						"Content-Type": "application/json",
+						"x-ratelimit-limit": "30",
+						"x-ratelimit-remaining": "29",
+						"x-ratelimit-reset": String(Math.floor(Date.now() / 1000) + 60),
+					},
+				}
+			) as unknown as Response
+		);
+
+		const { default: Home } = await import("@/app/page");
+		render(<Home />);
+
+		await screen.findByText("acme/widgets");
+		expect(spy).toHaveBeenCalled();
+		const [, opts] = spy.mock.calls[0];
+		expect((opts as any).headers.Authorization).toBe(
+			"Bearer github_pat_TESTE1234567890"
+		);
+ });
+ 
+// helper robusto para mockar fetch N vezes
+function mockFetchAll(status: number, body: any, headers: Record<string, string> = {}) {
+  (global.fetch as any) = vi.fn().mockResolvedValue({
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: String(status),
+    json: async () => body,
+    headers: {
+      get: (k: string) => headers[k.toLowerCase()] ?? null,
+    },
+  });
+}
+
+describe("Home page - estados de erro e empty", () => {
+  it("exibe estado de erro com dica quando rate-limit 403", async () => {
+    mockFetchAll(
+      403,
+      { message: "rate limited" },
+      {
+        "x-ratelimit-limit": "10",
+        "x-ratelimit-remaining": "0",
+        "x-ratelimit-reset": String(Math.floor(Date.now() / 1000) + 60),
+      }
+    );
+
+    render(<Home />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/limite da search api atingido/i);
+    expect(alert).toHaveTextContent(/adicione um pat/i);
+  });
+
+  it("exibe empty state quando busca não retorna resultados", async () => {
+  // A API retorna zero itens
+  mockFetchAll(200, { total_count: 0, items: [] });
+
+  render(<Home />);
+
+  // Digita uma busca para acionar o fluxo de empty state “com query”
+  const search = screen.getByRole("searchbox", { name: /buscar repositórios/i });
+  await userEvent.type(search, "nothing-here");
+
+  // Espera pela mensagem de “nenhum resultado”
+  await waitFor(
+    () => {
+      expect(
+        screen.getByText(/nenhum repositório encontrado/i)
+      ).toBeInTheDocument();
+    },
+    { timeout: 2000 } // margem para o debounce
+  );
+})
+}); 
 });
+
