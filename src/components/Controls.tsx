@@ -75,9 +75,8 @@ export const Controls = forwardRef<ControlsHandle, Props>(function Controls(
 	useEffect(() => setMounted(true), []);
 
 	return (
-		<div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
-			{/* INPUT DE BUSCA */}
-			<div className="flex-1 relative">
+		<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto] items-start gap-3 sm:gap-4 w-full">
+ 			 <div className="relative min-w-0 sm:col-span-2 lg:col-span-1">
 				<label htmlFor="search" className="sr-only">
 					Buscar repositórios
 				</label>
@@ -108,11 +107,11 @@ export const Controls = forwardRef<ControlsHandle, Props>(function Controls(
 			</div>
 
 			{/* (A.1) ← AQUI entra o BLOCO DE LINGUAGEM */}
-			<div className="flex items-center gap-2">
+			<div className="flex items-center gap-2 w-full sm:w-auto">
 				<label htmlFor="language" className="text-sm text-neutral-400">
 					Linguagem:
 				</label>
-				<select
+				<select 
 					id="language"
 					value={language}
 					onChange={(e) => setLanguage(e.target.value)}
@@ -127,7 +126,7 @@ export const Controls = forwardRef<ControlsHandle, Props>(function Controls(
 			</div>
 
 			{/* (B) ORDENAR */}
-			<div className="flex items-center gap-2">
+			<div className="flex items-center gap-2 w-full sm:w-auto">
 				<label htmlFor="sort" className="text-sm text-neutral-400">
 					Ordenar:
 				</label>
@@ -144,7 +143,7 @@ export const Controls = forwardRef<ControlsHandle, Props>(function Controls(
 			</div>
 
 			{/* (C) ORDEM (condicional) */}
-			<div className="flex items-center gap-2">
+			<div className="flex items-center gap-2 w-full sm:w-auto">
 				<label htmlFor="order" className="text-sm text-neutral-400">
 					Ordem:
 				</label>
@@ -158,13 +157,13 @@ export const Controls = forwardRef<ControlsHandle, Props>(function Controls(
 					aria-disabled={!mounted || sort === "best"}
 					className="rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/50 disabled:opacity-50 disabled:cursor-not-allowed"
 				>
-					<option value="desc">Descendente</option>
-					<option value="asc">Ascendente</option>
+					<option value="desc">Desc.</option>
+					<option value="asc">Asc.</option>
 				</select>
 			</div>
 
 			{/* (D) POR PÁGINA */}
-			<div className="flex items-center gap-2">
+			<div className="flex items-center gap-2 w-full sm:w-auto">
 				<label htmlFor="perPage" className="text-sm text-neutral-400">
 					Por página:
 				</label>
@@ -172,7 +171,7 @@ export const Controls = forwardRef<ControlsHandle, Props>(function Controls(
 					id="perPage"
 					value={perPage}
 					onChange={(e) => setPerPage(Number(e.target.value))}
-					className="rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/50"
+					className="w-full sm:w-auto rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/50"
 				>
 					{[10, 20, 30, 50, 100].map((n) => (
 						<option key={n} value={n}>

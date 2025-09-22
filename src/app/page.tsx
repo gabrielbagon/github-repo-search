@@ -63,13 +63,17 @@ export default function Home() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	// ⚠️ Defaults estáveis para SSR — nada de window aqui
+	//  Defaults estáveis para SSR — nada de window aqui
 	const [query, setQuery] = useState("");
 	const [sort, setSort] = useState<"best" | "stars" | "updated">("best");
 	const [order, setOrder] = useState<"desc" | "asc">("desc");
 	const [perPage, setPerPage] = useState(10);
 	const [page, setPage] = useState(1);
 	const [language, setLanguage] = useState<string>("");
+ 
+  // Filtro versão Mobile
+  const [filtersOpen, setFiltersOpen] = useState(true);
+
 
 	// Hidratar do URL + localStorage APÓS montar (evita hydration mismatch)
 	useEffect(() => {
@@ -312,7 +316,7 @@ export default function Home() {
 	const copyDisabled = !mounted;
 
 	return (
-		<div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
+		<div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-4 sm:p-8 lg:p-12 pb-20 gap-10 sm:gap-16">
 			{/* Skip link */}
 			<a
 				href="#results-heading"
@@ -331,45 +335,55 @@ export default function Home() {
 						<PatControl />
 					</section>
 				)}
+{/* Toggle de filtros — só no mobile; em ≥sm o painel fica sempre visível */}
+<div className="w-full -mt-2 sm:hidden">
+  <button
+    type="button"
+    onClick={() => setFiltersOpen(v => !v)}
+    aria-expanded={filtersOpen}
+    aria-controls="filters-panel"
+    className="w-full inline-flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:border-emerald-400/40"
+    title={filtersOpen ? "Hide filters" : "Show filters"}
+  >
+    <span>Filters</span>
+    <span aria-hidden="true">{filtersOpen ? "▴" : "▾"}</span>
+  </button>
+</div>
 
-				<Controls
-					ref={controlsRef as any}
-					query={query}
-					setQuery={safeSetQuery}
-					sort={sort}
-					setSort={setSort}
-					order={order}
-					setOrder={setOrder}
-					perPage={perPage}
-					setPerPage={setPerPage}
-					language={language}
-					setLanguage={setLanguage}
-				/>
+{/* Painel de filtros — no mobile obedece ao toggle; em ≥sm é sempre visível */}
+<div
+  id="filters-panel"
+  className={`${filtersOpen ? "block" : "hidden"} sm:block w-full`}
+>
+  <Controls
+    ref={controlsRef as any}
+    query={query}
+    setQuery={safeSetQuery}
+    sort={sort}
+    setSort={setSort}
+    order={order}
+    setOrder={setOrder}
+    perPage={perPage}
+    setPerPage={setPerPage}
+    language={language}
+    setLanguage={setLanguage}
+  />
 
-				{/* Ações rápidas */}
-				<div className="w-full -mt-2 flex justify-end gap-2">
-					<button
-						type="button"
-						onClick={handleCopyLink}
-						aria-label="Copiar link da busca"
-						title="Copiar link da busca"
-						disabled={copyDisabled}
-						className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:border-emerald-400/40 disabled:opacity-50"
-					>
-						{copied ? "Link copiado!" : "Copiar link"}
-					</button>
+{/* Ações rápidas: Copiar link / Limpar filtros */}
+<div className="w-full -mt-2 flex justify-end gap-2">
+   <button
+      type="button"
+      onClick={handleClearFilters}
+      aria-label="Limpar filtros"
+      title="Limpar filtros"
+      disabled={clearDisabled}
+      className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:border-emerald-400/40 disabled:opacity-50"
+    >
+      Limpar filtros
+    </button>
+</div>
+</div>
 
-					<button
-						type="button"
-						onClick={handleClearFilters}
-						aria-label="Limpar filtros"
-						title="Limpar filtros"
-						disabled={clearDisabled}
-						className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:border-emerald-400/40 disabled:opacity-50"
-					>
-						Limpar filtros
-					</button>
-				</div>
 
 				{/* STATUS compacto */}
 				<div className="mt-1 text-xs text-neutral-500" aria-live="polite">
@@ -469,7 +483,7 @@ export default function Home() {
 						← Anterior
 					</button>
 
-					<div className="flex items-center gap-1">
+					<div className="hidden sm:flex items-center gap-1">
 						{pages[0] > 1 && (
 							<button type="button" onClick={() => setPage(1)} className="px-3 py-2 text-sm rounded-lg hover:bg-white/5">
 								1…
