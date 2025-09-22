@@ -19,15 +19,14 @@ import { Footer } from "@/components/Footer";
 export default function Home() {
 	const resultsHeadingRef = useRef<HTMLHeadingElement | null>(null);
 	const controlsRef = useRef<ControlsHandle | null>(null);
-  
 
 	// Estado para mostrar/esconder o painel PAT
 	const [showPat, setShowPat] = useState<boolean>(FEATURES.PAT ?? false);
-// Evita hydration mismatch em atributos que dependem de APIs do browser
-  const [mounted, setMounted] = useState(false);
-useEffect(() => {
-  setMounted(true);
-}, []);
+	// Evita hydration mismatch em atributos que dependem de APIs do browser
+	const [mounted, setMounted] = useState(false);
+	useEffect(() => {
+		setMounted(true);
+	}, []);
 	// Helpers de clamp
 	const ALLOWED_SORT = new Set(["best", "stars", "updated"] as const);
 	const ALLOWED_ORDER = new Set(["asc", "desc"] as const);
@@ -341,7 +340,7 @@ useEffect(() => {
 						onClick={handleCopyLink}
 						aria-label="Copiar link da busca"
 						title="Copiar link da busca"
-						 disabled={!mounted}
+						disabled={!mounted}
 						className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:border-emerald-400/40 disabled:opacity-50 disabled:cursor-not-allowed"
 					>
 						{/* ícone link */}
