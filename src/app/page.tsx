@@ -14,6 +14,7 @@ import { FEATURES } from "@/config";
 import { PatControl } from "@/components/PatControl";
 import { usePatToken } from "@/lib/usePatToken";
 import { clampPrefs, readPrefs, writePrefs } from "@/lib/prefs";
+import { useSavedSearches } from "@/lib/savedSearches";
 import { Footer } from "@/components/Footer";
 
 export default function Home() {
@@ -22,11 +23,7 @@ export default function Home() {
 
 	// Estado para mostrar/esconder o painel PAT
 	const [showPat, setShowPat] = useState<boolean>(FEATURES.PAT ?? false);
-	// Evita hydration mismatch em atributos que dependem de APIs do browser
-	const [mounted, setMounted] = useState(false);
-	useEffect(() => {
-		setMounted(true);
-	}, []);
+
 	// Helpers de clamp
 	const ALLOWED_SORT = new Set(["best", "stars", "updated"] as const);
 	const ALLOWED_ORDER = new Set(["asc", "desc"] as const);
@@ -123,6 +120,33 @@ export default function Home() {
 	const [isPending, startTransition] = useTransition();
 	const safeSetQuery = (v: string) => startTransition(() => setQuery(v));
 	const debouncedQuery = useDebouncedValue(query, 500);
+
+	// flag de montagem para evitar hydration mismatch em atributos dinâmicos
+	const [mounted, setMounted] = useState(false);
+	useEffect(() => setMounted(true), []);
+
+	// saved searches
+	const { add: addSaved, remove: removeSaved, isSavedFor } = useSavedSearches();
+
+	// chave da busca atual (usa o estado já existente)
+	const isSaved = isSavedFor({
+		q: debouncedQuery,
+		language,
+		sort,
+		order,
+		perPage,
+	});
+
+	// handler para salvar/unsalvar
+	function handleToggleSave() {
+		if (!debouncedQuery) return; // não salva busca vazia
+		const id = `${debouncedQuery}|${language}|${sort}|${order}|${perPage}`;
+		if (isSaved) {
+			removeSaved(id);
+		} else {
+			addSaved({ q: debouncedQuery, language, sort, order, perPage });
+		}
+	}
 
 	// Reset page ao mudar filtros/busca
 	useEffect(() => {
@@ -370,6 +394,25 @@ export default function Home() {
 						</svg>
 						Limpar filtros
 					</button>
+					<button
+						type="button"
+						onClick={handleToggleSave}
+						aria-pressed={isSaved}
+						aria-label={isSaved ? "Remove saved search" : "Save current search"}
+						title={isSaved ? "Unsave search" : "Save search"}
+						disabled={!mounted || !debouncedQuery}
+						className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:border-emerald-400/40 disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						{/* ícone de estrela */}
+						<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24">
+							<path
+								fill="currentColor"
+								d="m12 17.27 6.18 3.73-1.64-7.03L22 9.24l-7.19-.62L12 2 9.19 8.62 2 9.24l5.46 4.73L5.82 21z"
+							/>
+						</svg>
+						{isSaved ? "Saved" : "Save"}
+					</button>
+					
 				</div>
 
 				{/* STATUS compacto */}
